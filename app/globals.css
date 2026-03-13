@@ -1,0 +1,36 @@
+﻿@import "tailwindcss";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-montserrat);
+  --font-mono: var(--font-montserrat);
+  --color-border: var(--border);
+  --color-ring: var(--ring);
+}
+
+:root {
+  --background: #ffffff;
+  --foreground: #111111;
+  --border: #e6e6e6;
+  --ring: #bfbfbf;
+}
+
+.dark {
+  --background: #1f1f1f;
+  --foreground: #f5f5f5;
+  --border: rgba(255, 255, 255, 0.1);
+  --ring: #8a8a8a;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+  }
+}
