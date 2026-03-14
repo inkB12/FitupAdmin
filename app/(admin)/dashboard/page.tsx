@@ -1,13 +1,31 @@
-﻿import Link from "next/link";
-import { ArrowUpRight } from "lucide-react";
+"use client";
 
+import Link from "next/link";
+import { ArrowUpRight } from "lucide-react";
+import { useEffect, useState } from "react";
+
+import ApiPanel from "@/components/admin/ApiPanel";
 import KpiCard from "@/components/admin/KpiCard";
 import StatusBadge from "@/components/admin/StatusBadge";
+import { clientApi, type ApiResult } from "@/lib/client-api";
 import { DASHBOARD_KPIS, TRANSACTIONS, USERS } from "@/lib/admin-data";
 
 export default function DashboardPage() {
   const latestUsers = USERS.slice(0, 4);
   const latestTransactions = TRANSACTIONS.slice(0, 4);
+  const [dashboardApi, setDashboardApi] = useState<ApiResult<unknown>>({ data: null, error: null });
+
+  useEffect(() => {
+    let active = true;
+    clientApi.get<unknown>("/api/DashBoard").then((result) => {
+      if (active) {
+        setDashboardApi(result);
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   return (
     <div className="space-y-8">
@@ -31,6 +49,8 @@ export default function DashboardPage() {
           />
         ))}
       </section>
+
+      <ApiPanel title="Dashboard API" data={dashboardApi.data} error={dashboardApi.error} />
 
       <section className="grid gap-6 xl:grid-cols-2">
         <article className="rounded-3xl border border-zinc-800 bg-[#121212] p-6">

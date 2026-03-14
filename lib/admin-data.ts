@@ -8,6 +8,9 @@
     | "packages"
     | "blogs"
     | "transactions"
+    | "bookings"
+    | "conversion-rates"
+    | "workouts"
     | "settings";
 };
 
@@ -61,6 +64,9 @@ export const SIDEBAR_ITEMS: SidebarItem[] = [
   { label: "Packages", href: "/packages", key: "packages" },
   { label: "Blogs", href: "/blogs", key: "blogs" },
   { label: "Transactions", href: "/transactions", key: "transactions" },
+  { label: "Bookings", href: "/bookings", key: "bookings" },
+  { label: "Conversion Rates", href: "/conversion-rates", key: "conversion-rates" },
+  { label: "Workouts", href: "/workouts", key: "workouts" },
   { label: "Settings", href: "/settings", key: "settings" },
 ];
 

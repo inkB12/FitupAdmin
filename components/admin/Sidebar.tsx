@@ -10,6 +10,9 @@ import {
   Package,
   Newspaper,
   CreditCard,
+  CalendarCheck,
+  Percent,
+  Flame,
   Settings,
   X,
 } from "lucide-react";
@@ -29,6 +32,9 @@ const iconMap = {
   packages: Package,
   blogs: Newspaper,
   transactions: CreditCard,
+  bookings: CalendarCheck,
+  "conversion-rates": Percent,
+  workouts: Flame,
   settings: Settings,
 } as const;
 

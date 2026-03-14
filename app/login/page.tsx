@@ -1,9 +1,94 @@
-﻿import Image from "next/image";
+"use client";
+
+import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useState, type FormEvent } from "react";
 
 import { Button } from "@/components/ui/button";
+import { setAuthToken } from "@/lib/client-api";
+
+function findToken(value: unknown): string | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = findToken(item);
+      if (found) {
+        return found;
+      }
+    }
+    return null;
+  }
+  const record = value as Record<string, unknown>;
+  if (typeof record.data === "object" && record.data) {
+    const dataRecord = record.data as Record<string, unknown>;
+    if (typeof dataRecord.accessToken === "string") {
+      return dataRecord.accessToken;
+    }
+  }
+  for (const [key, entry] of Object.entries(record)) {
+    if (typeof entry === "string" && key.toLowerCase().includes("token")) {
+      return entry;
+    }
+    const found = findToken(entry);
+    if (found) {
+      return found;
+    }
+  }
+  return null;
+}
 
 export default function LoginPage() {
+  const router = useRouter();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setError(null);
+    setIsLoading(true);
+
+    try {
+      const response = await fetch("/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ email, password }),
+      });
+
+      if (!response.ok) {
+        const message = await response.text().catch(() => response.statusText);
+        throw new Error(message || response.statusText);
+      }
+
+      const responseText = await response.text();
+      let token: string | null = response.headers.get("authorization");
+      if (responseText) {
+        try {
+          const json = JSON.parse(responseText) as unknown;
+          token = token ?? findToken(json);
+        } catch {
+          token = token ?? null;
+        }
+      }
+
+      if (token) {
+        setAuthToken(token);
+      }
+
+      router.push("/dashboard");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error";
+      setError(`Login failed. ${message}`);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#1f1f1f] px-4 text-white">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(214,140,69,0.28),transparent_40%),radial-gradient(circle_at_bottom_left,rgba(107,18,28,0.28),transparent_35%)]" />
@@ -20,13 +105,16 @@ export default function LoginPage() {
         <h1 className="text-2xl font-black">Welcome Back</h1>
         <p className="mt-2 text-sm text-zinc-400">Sign in to manage users, packages, and platform content.</p>
 
-        <form className="mt-7 space-y-4">
+        <form className="mt-7 space-y-4" onSubmit={handleSubmit}>
           <label className="block">
             <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.1em] text-zinc-400">Email</span>
             <input
               type="email"
               placeholder="admin@fitup.com"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
               className="h-11 w-full rounded-xl border border-zinc-700 bg-zinc-900 px-4 text-sm outline-none transition-colors focus:border-[#d68c45]"
+              required
             />
           </label>
 
@@ -35,12 +123,17 @@ export default function LoginPage() {
             <input
               type="password"
               placeholder="********"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
               className="h-11 w-full rounded-xl border border-zinc-700 bg-zinc-900 px-4 text-sm outline-none transition-colors focus:border-[#d68c45]"
+              required
             />
           </label>
 
-          <Button type="button" className="mt-2 w-full">
-            Sign In
+          {error ? <p className="text-sm text-amber-300">{error}</p> : null}
+
+          <Button type="submit" className="mt-2 w-full" disabled={isLoading}>
+            {isLoading ? "Signing In..." : "Sign In"}
           </Button>
         </form>
 

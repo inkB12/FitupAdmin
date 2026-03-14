@@ -16,6 +16,9 @@ const titleMap: Record<string, string> = {
   "/packages": "Packages",
   "/blogs": "Blogs",
   "/transactions": "Transactions",
+  "/bookings": "Bookings",
+  "/conversion-rates": "Conversion Rates",
+  "/workouts": "Workouts",
   "/settings": "Settings",
 };
 

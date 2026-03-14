@@ -10,6 +10,18 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  async rewrites() {
+    return [
+      {
+        source: "/api/:path*",
+        destination: "https://fitupproject.onrender.com/api/:path*",
+      },
+      {
+        source: "/auth/:path*",
+        destination: "https://fitupproject.onrender.com/auth/:path*",
+      },
+    ];
+  },
 };
 
 export default nextConfig;

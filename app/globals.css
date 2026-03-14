@@ -12,6 +12,7 @@
 }
 
 :root {
+  --font-montserrat: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
   --background: #ffffff;
   --foreground: #111111;
   --border: #e6e6e6;
