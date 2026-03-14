@@ -1,10 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowUpRight } from "lucide-react";
+import { ArrowUpRight, Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
-import ApiStatus from "@/components/admin/ApiStatus";
 import KpiCard from "@/components/admin/KpiCard";
 import StatusBadge from "@/components/admin/StatusBadge";
 import { clientApi } from "@/lib/client-api";
@@ -16,6 +15,23 @@ type TableSpec = {
   columns: string[];
   rows: DashboardRecord[];
 };
+
+const PAGE_SIZE = 6;
+
+function buildPageNumbers(current: number, total: number) {
+  if (total <= 1) {
+    return [1];
+  }
+  const pages = new Set<number>();
+  pages.add(1);
+  pages.add(total);
+  for (let i = current - 1; i <= current + 1; i += 1) {
+    if (i > 1 && i < total) {
+      pages.add(i);
+    }
+  }
+  return Array.from(pages).sort((a, b) => a - b);
+}
 
 function findArray(value: unknown, depth = 0): DashboardRecord[] | null {
   if (Array.isArray(value)) {
@@ -43,7 +59,9 @@ function buildTable(data: unknown): TableSpec | null {
   if (!sample || typeof sample !== "object") {
     return null;
   }
-  const columns = Object.keys(sample as Record<string, unknown>).slice(0, 6);
+  const columns = Object.keys(sample as Record<string, unknown>)
+    .filter((column) => !column.toLowerCase().includes("id"))
+    .slice(0, 6);
   return { columns, rows: rows as DashboardRecord[] };
 }
 
@@ -60,16 +78,14 @@ function renderCell(value: unknown) {
 export default function DashboardPage() {
   const latestUsers = USERS.slice(0, 4);
   const latestTransactions = TRANSACTIONS.slice(0, 4);
-  const [checked, setChecked] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [rawDashboard, setRawDashboard] = useState<unknown>(null);
+  const [query, setQuery] = useState("");
+  const [page, setPage] = useState(1);
 
   useEffect(() => {
     let active = true;
     clientApi.get("/api/DashBoard").then((result) => {
       if (active) {
-        setError(result.error ?? null);
-        setChecked(true);
         setRawDashboard(result.data ?? null);
       }
     });
@@ -80,9 +96,24 @@ export default function DashboardPage() {
 
   const table = useMemo(() => buildTable(rawDashboard), [rawDashboard]);
 
+  const filteredRows = useMemo(() => {
+    if (!table) {
+      return [] as DashboardRecord[];
+    }
+    const term = query.trim().toLowerCase();
+    if (!term) {
+      return table.rows;
+    }
+    return table.rows.filter((row) => JSON.stringify(row).toLowerCase().includes(term));
+  }, [table, query]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const pageRows = filteredRows.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  const pageNumbers = buildPageNumbers(currentPage, totalPages);
+
   return (
     <div className="space-y-8">
-      <ApiStatus label="Dashboard API" checked={checked} error={error} />
       <section className="rounded-3xl border border-zinc-800 bg-[linear-gradient(120deg,#121212_0%,#1b1b1b_60%,#2a1f18_100%)] p-6 md:p-8">
         <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#d68c45]">FITUP Admin</p>
         <h2 className="mt-3 text-2xl font-black md:text-3xl">Operations Overview</h2>
@@ -93,6 +124,21 @@ export default function DashboardPage() {
 
       {table ? (
         <section className="rounded-3xl border border-zinc-800 bg-[#121212] p-6 md:p-7">
+          <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div className="flex items-center gap-2 rounded-2xl border border-zinc-800 bg-zinc-900/50 px-4 py-2 text-sm text-zinc-300">
+              <Search className="h-4 w-4 text-zinc-500" />
+              <input
+                value={query}
+                onChange={(event) => {
+                  setQuery(event.target.value);
+                  setPage(1);
+                }}
+                placeholder="Search dashboard data"
+                className="w-full bg-transparent text-sm outline-none placeholder:text-zinc-500"
+              />
+            </div>
+            <div className="text-xs text-zinc-500">Showing {pageRows.length} of {filteredRows.length}</div>
+          </div>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[900px] text-left text-sm">
               <thead>
@@ -105,7 +151,7 @@ export default function DashboardPage() {
                 </tr>
               </thead>
               <tbody>
-                {table.rows.slice(0, 8).map((row, index) => (
+                {pageRows.map((row, index) => (
                   <tr key={index} className="border-b border-zinc-800/60 text-zinc-200">
                     {table.columns.map((column) => (
                       <td key={column} className="py-3 text-xs">
@@ -117,8 +163,64 @@ export default function DashboardPage() {
               </tbody>
             </table>
           </div>
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-xs text-zinc-500">
+            <span>Page {currentPage} of {totalPages}</span>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+                disabled={currentPage === 1}
+                className="rounded-full border border-zinc-700 px-3 py-1 text-zinc-200 disabled:opacity-50"
+              >
+                Prev
+              </button>
+              {pageNumbers.map((number) => (
+                <button
+                  key={number}
+                  type="button"
+                  onClick={() => setPage(number)}
+                  className={`rounded-full border px-3 py-1 text-zinc-200 ${
+                    number === currentPage
+                      ? "border-emerald-400 text-emerald-200"
+                      : "border-zinc-700"
+                  }`}
+                >
+                  {number}
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
+                disabled={currentPage === totalPages}
+                className="rounded-full border border-zinc-700 px-3 py-1 text-zinc-200 disabled:opacity-50"
+              >
+                Next
+              </button>
+            </div>
+          </div>
         </section>
-      ) : null}
+      ) : (
+        <section className="rounded-3xl border border-zinc-800 bg-[#121212] p-6 md:p-7">
+          <div className="flex flex-col gap-2">
+            <p className="text-sm font-semibold text-zinc-200">Dashboard data is unavailable.</p>
+            <p className="text-xs text-zinc-500">
+              Showing default KPIs below until the API connects.
+            </p>
+          </div>
+          <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            {DASHBOARD_KPIS.map((item) => (
+              <div
+                key={`fallback-${item.title}`}
+                className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-4"
+              >
+                <p className="text-xs uppercase tracking-[0.1em] text-zinc-500">{item.title}</p>
+                <p className="mt-2 text-xl font-black text-white">{item.value}</p>
+                <p className="mt-1 text-xs text-zinc-500">{item.delta}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {DASHBOARD_KPIS.map((item) => (

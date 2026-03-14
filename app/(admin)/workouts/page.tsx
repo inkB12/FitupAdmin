@@ -1,9 +1,8 @@
 "use client";
 
-import { Pencil, Plus, Save, Trash2, X } from "lucide-react";
+import { Pencil, Plus, Save, Search, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
-import ApiStatus from "@/components/admin/ApiStatus";
 import { clientApi } from "@/lib/client-api";
 
 type WorkoutRow = Record<string, unknown>;
@@ -26,6 +25,8 @@ type ModalState = {
   rowId: string | null;
   values: Record<string, string>;
 };
+
+const PAGE_SIZE = 6;
 
 function shouldHideColumn(column: string) {
   return column.toLowerCase().includes("id");
@@ -85,12 +86,23 @@ function getRowId(row: WorkoutRow) {
 
 function InlineEditableTable({ title, table, onCreate, onUpdate, onDelete }: InlineTableProps) {
   const [modal, setModal] = useState<ModalState>({ mode: null, rowId: null, values: {} });
+  const [query, setQuery] = useState("");
+  const [page, setPage] = useState(1);
 
-  if (!table) {
-    return null;
-  }
+  const columns = table?.columns ?? [];
 
-  const { columns, rows } = table;
+  const filteredRows = useMemo(() => {
+    const source = table?.rows ?? [];
+    const term = query.trim().toLowerCase();
+    if (!term) {
+      return source;
+    }
+    return source.filter((row) => JSON.stringify(row).toLowerCase().includes(term));
+  }, [table, query]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const pageRows = filteredRows.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   const openCreate = () => {
     const values: Record<string, string> = {};
@@ -126,18 +138,36 @@ function InlineEditableTable({ title, table, onCreate, onUpdate, onDelete }: Inl
     closeModal();
   };
 
+  if (!table) {
+    return null;
+  }
+
   return (
     <section className="rounded-3xl border border-zinc-800 bg-[#121212] p-6 md:p-7">
-      <div className="mb-4 flex items-center justify-between">
+      <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <h3 className="text-lg font-extrabold">{title}</h3>
-        <button
-          type="button"
-          onClick={openCreate}
-          className="inline-flex items-center gap-2 rounded-full border border-zinc-700 px-4 py-1.5 text-xs font-semibold text-zinc-200 hover:border-emerald-400 hover:text-emerald-300"
-        >
-          <Plus className="h-3.5 w-3.5" />
-          Create
-        </button>
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2 rounded-2xl border border-zinc-800 bg-zinc-900/50 px-4 py-2 text-sm text-zinc-300">
+            <Search className="h-4 w-4 text-zinc-500" />
+            <input
+              value={query}
+              onChange={(event) => {
+                setQuery(event.target.value);
+                setPage(1);
+              }}
+              placeholder="Search records"
+              className="w-full bg-transparent text-sm outline-none placeholder:text-zinc-500"
+            />
+          </div>
+          <button
+            type="button"
+            onClick={openCreate}
+            className="inline-flex items-center gap-2 rounded-full border border-zinc-700 px-4 py-1.5 text-xs font-semibold text-zinc-200 hover:border-emerald-400 hover:text-emerald-300"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Create
+          </button>
+        </div>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[900px] text-left text-sm">
@@ -152,7 +182,7 @@ function InlineEditableTable({ title, table, onCreate, onUpdate, onDelete }: Inl
             </tr>
           </thead>
           <tbody>
-            {rows.slice(0, 10).map((row, index) => {
+            {pageRows.map((row, index) => {
               const rowId = getRowId(row) || String(index);
               return (
                 <tr key={rowId} className="border-b border-zinc-800/60 text-zinc-200">
@@ -190,6 +220,27 @@ function InlineEditableTable({ title, table, onCreate, onUpdate, onDelete }: Inl
             })}
           </tbody>
         </table>
+      </div>
+      <div className="mt-4 flex items-center justify-between text-xs text-zinc-500">
+        <span>Page {currentPage} of {totalPages}</span>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+            disabled={currentPage === 1}
+            className="rounded-full border border-zinc-700 px-3 py-1 text-zinc-200 disabled:opacity-50"
+          >
+            Prev
+          </button>
+          <button
+            type="button"
+            onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
+            disabled={currentPage === totalPages}
+            className="rounded-full border border-zinc-700 px-3 py-1 text-zinc-200 disabled:opacity-50"
+          >
+            Next
+          </button>
+        </div>
       </div>
 
       {modal.mode ? (
@@ -249,10 +300,6 @@ function InlineEditableTable({ title, table, onCreate, onUpdate, onDelete }: Inl
 }
 
 export default function WorkoutsPage() {
-  const [typesChecked, setTypesChecked] = useState(false);
-  const [typesError, setTypesError] = useState<string | null>(null);
-  const [workoutsChecked, setWorkoutsChecked] = useState(false);
-  const [workoutsError, setWorkoutsError] = useState<string | null>(null);
   const [rawTypes, setRawTypes] = useState<unknown>(null);
   const [rawWorkouts, setRawWorkouts] = useState<unknown>(null);
 
@@ -260,15 +307,11 @@ export default function WorkoutsPage() {
     let active = true;
     clientApi.get("/api/workout-types").then((result) => {
       if (active) {
-        setTypesError(result.error ?? null);
-        setTypesChecked(true);
         setRawTypes(result.data ?? null);
       }
     });
     clientApi.get("/api/workouts").then((result) => {
       if (active) {
-        setWorkoutsError(result.error ?? null);
-        setWorkoutsChecked(true);
         setRawWorkouts(result.data ?? null);
       }
     });
@@ -282,8 +325,6 @@ export default function WorkoutsPage() {
 
   return (
     <div className="space-y-6">
-      <ApiStatus label="Workout Types API" checked={typesChecked} error={typesError} />
-      <ApiStatus label="Workouts API" checked={workoutsChecked} error={workoutsError} />
       <section>
         <h2 className="text-2xl font-black">Workouts</h2>
         <p className="mt-1 text-sm text-zinc-400">Manage workout types and workout libraries.</p>

@@ -1,6 +1,6 @@
 "use client";
 
-import { Pencil, Plus, Save, Trash2, X } from "lucide-react";
+import { Pencil, Plus, Save, Search, Trash2, X } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import StatusBadge from "@/components/admin/StatusBadge";
@@ -21,6 +21,23 @@ type ModalState = {
   values: TransactionRow;
 };
 
+const PAGE_SIZE = 6;
+
+function buildPageNumbers(current: number, total: number) {
+  if (total <= 1) {
+    return [1];
+  }
+  const pages = new Set<number>();
+  pages.add(1);
+  pages.add(total);
+  for (let i = current - 1; i <= current + 1; i += 1) {
+    if (i > 1 && i < total) {
+      pages.add(i);
+    }
+  }
+  return Array.from(pages).sort((a, b) => a - b);
+}
+
 const emptyDraft: TransactionRow = {
   id: "",
   customer: "",
@@ -33,12 +50,27 @@ const emptyDraft: TransactionRow = {
 export default function TransactionsPage() {
   const [rows, setRows] = useState<TransactionRow[]>(TRANSACTIONS);
   const [modal, setModal] = useState<ModalState>({ mode: null, rowId: null, values: emptyDraft });
+  const [query, setQuery] = useState("");
+  const [page, setPage] = useState(1);
 
   const totals = useMemo(() => {
     const totalPaid = rows.filter((item) => item.status === "paid").length;
     const totalRefunded = rows.filter((item) => item.status === "refunded").length;
     return { totalPaid, totalRefunded };
   }, [rows]);
+
+  const filteredRows = useMemo(() => {
+    const term = query.trim().toLowerCase();
+    if (!term) {
+      return rows;
+    }
+    return rows.filter((row) => JSON.stringify(row).toLowerCase().includes(term));
+  }, [rows, query]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const pageRows = filteredRows.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  const pageNumbers = buildPageNumbers(currentPage, totalPages);
 
   const openCreate = () => {
     setModal({ mode: "create", rowId: null, values: emptyDraft });
@@ -84,16 +116,30 @@ export default function TransactionsPage() {
       </section>
 
       <section className="rounded-3xl border border-zinc-800 bg-[#121212] p-6 md:p-7">
-        <div className="mb-5 flex items-center justify-between">
+        <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <h2 className="text-2xl font-black">Transactions</h2>
-          <button
-            type="button"
-            onClick={openCreate}
-            className="inline-flex items-center gap-2 rounded-full border border-zinc-700 px-4 py-1.5 text-xs font-semibold text-zinc-200 hover:border-emerald-400 hover:text-emerald-300"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            Create
-          </button>
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2 rounded-2xl border border-zinc-800 bg-zinc-900/50 px-4 py-2 text-sm text-zinc-300">
+              <Search className="h-4 w-4 text-zinc-500" />
+              <input
+                value={query}
+                onChange={(event) => {
+                  setQuery(event.target.value);
+                  setPage(1);
+                }}
+                placeholder="Search transactions"
+                className="w-full bg-transparent text-sm outline-none placeholder:text-zinc-500"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={openCreate}
+              className="inline-flex items-center gap-2 rounded-full border border-zinc-700 px-4 py-1.5 text-xs font-semibold text-zinc-200 hover:border-emerald-400 hover:text-emerald-300"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Create
+            </button>
+          </div>
         </div>
 
         <div className="overflow-x-auto">
@@ -109,7 +155,7 @@ export default function TransactionsPage() {
               </tr>
             </thead>
             <tbody>
-              {rows.map((item) => (
+              {pageRows.map((item) => (
                 <tr key={item.id} className="border-b border-zinc-800/70 text-zinc-200">
                   <td className="py-3 font-semibold text-white">{item.customer}</td>
                   <td className="py-3">{item.packageName}</td>
@@ -140,6 +186,42 @@ export default function TransactionsPage() {
               ))}
             </tbody>
           </table>
+        </div>
+
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-xs text-zinc-500">
+          <span>Page {currentPage} of {totalPages}</span>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+              disabled={currentPage === 1}
+              className="rounded-full border border-zinc-700 px-3 py-1 text-zinc-200 disabled:opacity-50"
+            >
+              Prev
+            </button>
+            {pageNumbers.map((number) => (
+              <button
+                key={number}
+                type="button"
+                onClick={() => setPage(number)}
+                className={`rounded-full border px-3 py-1 text-zinc-200 ${
+                  number === currentPage
+                    ? "border-emerald-400 text-emerald-200"
+                    : "border-zinc-700"
+                }`}
+              >
+                {number}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
+              disabled={currentPage === totalPages}
+              className="rounded-full border border-zinc-700 px-3 py-1 text-zinc-200 disabled:opacity-50"
+            >
+              Next
+            </button>
+          </div>
         </div>
       </section>
 

@@ -3,7 +3,6 @@
 import { Ban, Mail, Pencil, Search, ShieldCheck, UserRound, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import ApiStatus from "@/components/admin/ApiStatus";
 import StatusBadge from "@/components/admin/StatusBadge";
 import { clientApi, type ApiResult } from "@/lib/client-api";
 import { USERS } from "@/lib/admin-data";
@@ -31,6 +30,23 @@ const roleMap: Record<string, string> = {
   Optimize: "Customer",
   Premium: "Staff",
 };
+
+const PAGE_SIZE = 6;
+
+function buildPageNumbers(current: number, total: number) {
+  if (total <= 1) {
+    return [1];
+  }
+  const pages = new Set<number>();
+  pages.add(1);
+  pages.add(total);
+  for (let i = current - 1; i <= current + 1; i += 1) {
+    if (i > 1 && i < total) {
+      pages.add(i);
+    }
+  }
+  return Array.from(pages).sort((a, b) => a - b);
+}
 
 function RolePill({ role }: { role: string }) {
   const tone = role.toLowerCase().includes("staff") || role.toLowerCase().includes("admin")
@@ -77,15 +93,13 @@ function getAccountId(account: AccountRecord) {
 
 export default function UsersPage() {
   const [accounts, setAccounts] = useState<ApiResult<unknown>>({ data: null, error: null });
-  const [accountsChecked, setAccountsChecked] = useState(false);
-  const [accountsError, setAccountsError] = useState<string | null>(null);
   const [modal, setModal] = useState<ModalState>({ open: false, row: null, status: "active" });
+  const [query, setQuery] = useState("");
+  const [page, setPage] = useState(1);
 
   const loadAccounts = useCallback(() => {
     clientApi.get<unknown>("/api/admin/accounts").then((result) => {
       setAccounts(result);
-      setAccountsError(result.error ?? null);
-      setAccountsChecked(true);
     });
   }, []);
 
@@ -94,8 +108,6 @@ export default function UsersPage() {
     clientApi.get<unknown>("/api/admin/accounts").then((result) => {
       if (active) {
         setAccounts(result);
-        setAccountsError(result.error ?? null);
-        setAccountsChecked(true);
       }
     });
     return () => {
@@ -116,6 +128,19 @@ export default function UsersPage() {
       status: user.status,
     }));
   }, [accounts.data]);
+
+  const filteredRows = useMemo(() => {
+    const term = query.trim().toLowerCase();
+    if (!term) {
+      return accountRows;
+    }
+    return accountRows.filter((row) => JSON.stringify(row).toLowerCase().includes(term));
+  }, [accountRows, query]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const pageRows = filteredRows.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  const pageNumbers = buildPageNumbers(currentPage, totalPages);
 
   const openModal = (row: AccountRecord) => {
     setModal({ open: true, row, status: row.status ?? "active" });
@@ -166,7 +191,6 @@ export default function UsersPage() {
 
   return (
     <section className="space-y-6">
-      <ApiStatus label="Accounts API" checked={accountsChecked} error={accountsError} />
       <div className="rounded-3xl border border-zinc-800 bg-[#121212] p-6 md:p-7">
         <div className="mb-6">
           <h2 className="text-2xl font-black">Users Management</h2>
@@ -178,6 +202,11 @@ export default function UsersPage() {
             <Search className="h-4 w-4 text-zinc-500" />
             <input
               type="text"
+              value={query}
+              onChange={(event) => {
+                setQuery(event.target.value);
+                setPage(1);
+              }}
               placeholder="Search username, email, name"
               className="w-full bg-transparent text-sm outline-none placeholder:text-zinc-500"
             />
@@ -207,7 +236,7 @@ export default function UsersPage() {
               </tr>
             </thead>
             <tbody>
-              {accountRows.map((user, index) => {
+              {pageRows.map((user, index) => {
                 const email = user.email ?? "-";
                 const username = user.username ?? (email.includes("@") ? email.split("@")[0] : "user");
                 const name = user.name ?? user.fullName ?? username;
@@ -257,6 +286,42 @@ export default function UsersPage() {
               })}
             </tbody>
           </table>
+        </div>
+
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-xs text-zinc-500">
+          <span>Page {currentPage} of {totalPages}</span>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+              disabled={currentPage === 1}
+              className="rounded-full border border-zinc-700 px-3 py-1 text-zinc-200 disabled:opacity-50"
+            >
+              Prev
+            </button>
+            {pageNumbers.map((number) => (
+              <button
+                key={number}
+                type="button"
+                onClick={() => setPage(number)}
+                className={`rounded-full border px-3 py-1 text-zinc-200 ${
+                  number === currentPage
+                    ? "border-emerald-400 text-emerald-200"
+                    : "border-zinc-700"
+                }`}
+              >
+                {number}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
+              disabled={currentPage === totalPages}
+              className="rounded-full border border-zinc-700 px-3 py-1 text-zinc-200 disabled:opacity-50"
+            >
+              Next
+            </button>
+          </div>
         </div>
       </div>
 
