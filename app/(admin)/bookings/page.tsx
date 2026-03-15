@@ -3,6 +3,7 @@
 import { Ban, Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
+import { useAdminSearch } from "@/components/admin/AdminSearchContext";
 import { clientApi } from "@/lib/client-api";
 
 type BookingRow = Record<string, unknown>;
@@ -89,6 +90,7 @@ export default function BookingsPage() {
   const [rawBookings, setRawBookings] = useState<unknown>(null);
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
+  const { debouncedQuery: globalQuery } = useAdminSearch();
 
   useEffect(() => {
     let active = true;
@@ -103,17 +105,21 @@ export default function BookingsPage() {
   }, []);
 
   const table = useMemo(() => buildTable(rawBookings), [rawBookings]);
+  const combinedQuery = useMemo(
+    () => [query, globalQuery].filter(Boolean).join(" ").trim(),
+    [query, globalQuery],
+  );
 
   const filteredRows = useMemo(() => {
     if (!table) {
       return [] as BookingRow[];
     }
-    const term = query.trim().toLowerCase();
+    const term = combinedQuery.toLowerCase();
     if (!term) {
       return table.rows;
     }
     return table.rows.filter((row) => JSON.stringify(row).toLowerCase().includes(term));
-  }, [table, query]);
+  }, [table, combinedQuery]);
 
   const totalPages = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
@@ -230,3 +236,5 @@ export default function BookingsPage() {
     </div>
   );
 }
+
+

@@ -3,6 +3,7 @@
 import { Pencil, Plus, Save, Search, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
+import { useAdminSearch } from "@/components/admin/AdminSearchContext";
 import { clientApi } from "@/lib/client-api";
 
 type WorkoutRow = Record<string, unknown>;
@@ -15,6 +16,7 @@ type TableSpec = {
 type InlineTableProps = {
   title: string;
   table: TableSpec | null;
+  globalQuery: string;
   onCreate: (payload: Record<string, unknown>) => Promise<void>;
   onUpdate: (id: string, payload: Record<string, unknown>) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
@@ -84,21 +86,25 @@ function getRowId(row: WorkoutRow) {
   return "";
 }
 
-function InlineEditableTable({ title, table, onCreate, onUpdate, onDelete }: InlineTableProps) {
+function InlineEditableTable({ title, table, onCreate, onUpdate, onDelete, globalQuery }: InlineTableProps) {
   const [modal, setModal] = useState<ModalState>({ mode: null, rowId: null, values: {} });
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
 
   const columns = table?.columns ?? [];
+  const combinedQuery = useMemo(
+    () => [query, globalQuery].filter(Boolean).join(" ").trim(),
+    [query, globalQuery],
+  );
 
   const filteredRows = useMemo(() => {
     const source = table?.rows ?? [];
-    const term = query.trim().toLowerCase();
+    const term = combinedQuery.toLowerCase();
     if (!term) {
       return source;
     }
     return source.filter((row) => JSON.stringify(row).toLowerCase().includes(term));
-  }, [table, query]);
+  }, [table, combinedQuery]);
 
   const totalPages = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
@@ -302,6 +308,7 @@ function InlineEditableTable({ title, table, onCreate, onUpdate, onDelete }: Inl
 export default function WorkoutsPage() {
   const [rawTypes, setRawTypes] = useState<unknown>(null);
   const [rawWorkouts, setRawWorkouts] = useState<unknown>(null);
+  const { debouncedQuery: globalQuery } = useAdminSearch();
 
   useEffect(() => {
     let active = true;
@@ -333,6 +340,7 @@ export default function WorkoutsPage() {
       <InlineEditableTable
         title="Workout Types"
         table={typeTable}
+        globalQuery={globalQuery}
         onCreate={(payload) => clientApi.post("/api/workout-types", payload)}
         onUpdate={(id, payload) => clientApi.put(`/api/workout-types/${id}`, payload)}
         onDelete={(id) => clientApi.delete(`/api/workout-types/${id}`)}
@@ -341,6 +349,7 @@ export default function WorkoutsPage() {
       <InlineEditableTable
         title="Workouts"
         table={workoutTable}
+        globalQuery={globalQuery}
         onCreate={(payload) => clientApi.post("/api/workouts", payload)}
         onUpdate={(id, payload) => clientApi.put(`/api/workouts/${id}`, payload)}
         onDelete={(id) => clientApi.delete(`/api/workouts/${id}`)}
@@ -348,3 +357,6 @@ export default function WorkoutsPage() {
     </div>
   );
 }
+
+
+

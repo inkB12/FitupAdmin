@@ -3,6 +3,7 @@
 import { Ban, Mail, Pencil, Search, ShieldCheck, UserRound, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { useAdminSearch } from "@/components/admin/AdminSearchContext";
 import StatusBadge from "@/components/admin/StatusBadge";
 import { clientApi, type ApiResult } from "@/lib/client-api";
 import { USERS } from "@/lib/admin-data";
@@ -96,6 +97,7 @@ export default function UsersPage() {
   const [modal, setModal] = useState<ModalState>({ open: false, row: null, status: "active" });
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
+  const { debouncedQuery: globalQuery } = useAdminSearch();
 
   const loadAccounts = useCallback(() => {
     clientApi.get<unknown>("/api/admin/accounts").then((result) => {
@@ -130,12 +132,12 @@ export default function UsersPage() {
   }, [accounts.data]);
 
   const filteredRows = useMemo(() => {
-    const term = query.trim().toLowerCase();
+    const term = [query, globalQuery].filter(Boolean).join(" ").trim().toLowerCase();
     if (!term) {
       return accountRows;
     }
     return accountRows.filter((row) => JSON.stringify(row).toLowerCase().includes(term));
-  }, [accountRows, query]);
+  }, [accountRows, query, globalQuery]);
 
   const totalPages = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
@@ -389,3 +391,4 @@ export default function UsersPage() {
     </section>
   );
 }
+

@@ -1,8 +1,9 @@
-﻿"use client";
+"use client";
 
-import { Bell, Menu, Search } from "lucide-react";
+import { Bell, Menu, Search, X } from "lucide-react";
 import { usePathname } from "next/navigation";
 
+import { useAdminSearch } from "@/components/admin/AdminSearchContext";
 import { Button } from "@/components/ui/button";
 
 type TopbarProps = {
@@ -25,6 +26,7 @@ const titleMap: Record<string, string> = {
 export default function Topbar({ onMenuClick }: TopbarProps) {
   const pathname = usePathname();
   const activeTitle = titleMap[pathname] ?? "Admin";
+  const { query, setQuery } = useAdminSearch();
 
   return (
     <header className="sticky top-0 z-30 border-b border-zinc-800 bg-[#1f1f1f]/95 backdrop-blur">
@@ -50,9 +52,21 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
             <Search className="h-4 w-4" />
             <input
               type="text"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
               placeholder="Search users, packages, blogs..."
               className="w-full bg-transparent text-sm text-zinc-200 outline-none placeholder:text-zinc-500"
             />
+            {query ? (
+              <button
+                type="button"
+                onClick={() => setQuery("")}
+                className="rounded-full p-1 text-zinc-500 hover:text-zinc-200"
+                aria-label="Clear search"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            ) : null}
           </div>
 
           <Button variant="outline" size="icon" aria-label="Notifications">
@@ -63,3 +77,4 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
     </header>
   );
 }
+

@@ -3,6 +3,7 @@
 import { Pencil, Plus, Save, Search, Trash2, X } from "lucide-react";
 import { useMemo, useState } from "react";
 
+import { useAdminSearch } from "@/components/admin/AdminSearchContext";
 import StatusBadge from "@/components/admin/StatusBadge";
 import { TRANSACTIONS } from "@/lib/admin-data";
 
@@ -52,6 +53,7 @@ export default function TransactionsPage() {
   const [modal, setModal] = useState<ModalState>({ mode: null, rowId: null, values: emptyDraft });
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
+  const { debouncedQuery: globalQuery } = useAdminSearch();
 
   const totals = useMemo(() => {
     const totalPaid = rows.filter((item) => item.status === "paid").length;
@@ -60,12 +62,12 @@ export default function TransactionsPage() {
   }, [rows]);
 
   const filteredRows = useMemo(() => {
-    const term = query.trim().toLowerCase();
+    const term = [query, globalQuery].filter(Boolean).join(" ").trim().toLowerCase();
     if (!term) {
       return rows;
     }
     return rows.filter((row) => JSON.stringify(row).toLowerCase().includes(term));
-  }, [rows, query]);
+  }, [rows, query, globalQuery]);
 
   const totalPages = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
@@ -308,3 +310,5 @@ export default function TransactionsPage() {
     </div>
   );
 }
+
+

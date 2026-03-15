@@ -5,6 +5,7 @@ import { ArrowUpRight, Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import KpiCard from "@/components/admin/KpiCard";
+import { useAdminSearch } from "@/components/admin/AdminSearchContext";
 import StatusBadge from "@/components/admin/StatusBadge";
 import { clientApi } from "@/lib/client-api";
 import { DASHBOARD_KPIS, TRANSACTIONS, USERS } from "@/lib/admin-data";
@@ -81,6 +82,7 @@ export default function DashboardPage() {
   const [rawDashboard, setRawDashboard] = useState<unknown>(null);
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
+  const { debouncedQuery: globalQuery } = useAdminSearch();
 
   useEffect(() => {
     let active = true;
@@ -95,17 +97,21 @@ export default function DashboardPage() {
   }, []);
 
   const table = useMemo(() => buildTable(rawDashboard), [rawDashboard]);
+  const combinedQuery = useMemo(
+    () => [query, globalQuery].filter(Boolean).join(" ").trim(),
+    [query, globalQuery],
+  );
 
   const filteredRows = useMemo(() => {
     if (!table) {
       return [] as DashboardRecord[];
     }
-    const term = query.trim().toLowerCase();
+    const term = combinedQuery.toLowerCase();
     if (!term) {
       return table.rows;
     }
     return table.rows.filter((row) => JSON.stringify(row).toLowerCase().includes(term));
-  }, [table, query]);
+  }, [table, combinedQuery]);
 
   const totalPages = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
@@ -287,3 +293,4 @@ export default function DashboardPage() {
     </div>
   );
 }
+
