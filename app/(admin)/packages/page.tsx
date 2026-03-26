@@ -30,27 +30,6 @@ type PackageCard = {
   status?: string;
 };
 
-const fallbackPackages: PackageCard[] = [
-  {
-    name: "Basic",
-    price: "$19 / month",
-    activeUsers: 28390,
-    description: "AI training schedule and progress tracking.",
-  },
-  {
-    name: "Optimize",
-    price: "$39 / month",
-    activeUsers: 56312,
-    description: "Fully personalized training and nutrition plan.",
-  },
-  {
-    name: "Premium",
-    price: "$69 / month",
-    activeUsers: 19890,
-    description: "Includes 1:1 trainer support and priority care.",
-  },
-];
-
 function findArray(value: unknown, depth = 0): PremiumType[] | null {
   if (Array.isArray(value)) {
     return value as PremiumType[];
@@ -128,9 +107,6 @@ export default function PackagesPage() {
 
   const packageRows: PackageCard[] = useMemo(() => {
     const apiRows = extractPremiumTypes(premiumTypes.data);
-    if (apiRows.length === 0) {
-      return fallbackPackages;
-    }
     return apiRows.map((row) => {
       const name = row.name ?? row.title ?? "Premium";
       const monthly = row.monthlyPrice ?? row.monthly ?? row.price;
@@ -212,41 +188,48 @@ export default function PackagesPage() {
         <p className="mt-1 text-sm text-zinc-400">Manage plan tiers, pricing, and active subscribers.</p>
       </section>
 
-      <section className="grid gap-4 md:grid-cols-3">
-        {packageRows.map((item) => (
-          <article key={item.name} className="rounded-3xl border border-zinc-800 bg-[#121212] p-6">
-            <p className="text-xs uppercase tracking-[0.1em] text-zinc-500">Plan</p>
-            <h3 className="mt-1 text-2xl font-black text-white">{item.name}</h3>
-            <p className="mt-2 text-[#d68c45]">{item.price}</p>
-            {item.status ? (
-              <p className="mt-2 text-xs uppercase tracking-[0.12em] text-zinc-500">
-                Status: {item.status}
-              </p>
-            ) : null}
-            <p className="mt-4 text-sm text-zinc-400">{item.description}</p>
+      {packageRows.length === 0 ? (
+        <section className="rounded-3xl border border-zinc-800 bg-[#121212] p-6">
+          <p className="text-sm font-semibold text-zinc-200">No packages returned from the API.</p>
+          <p className="mt-1 text-xs text-zinc-500">Once data is available, plans will show here.</p>
+        </section>
+      ) : (
+        <section className="grid gap-4 md:grid-cols-3">
+          {packageRows.map((item) => (
+            <article key={item.name} className="rounded-3xl border border-zinc-800 bg-[#121212] p-6">
+              <p className="text-xs uppercase tracking-[0.1em] text-zinc-500">Plan</p>
+              <h3 className="mt-1 text-2xl font-black text-white">{item.name}</h3>
+              <p className="mt-2 text-[#d68c45]">{item.price}</p>
+              {item.status ? (
+                <p className="mt-2 text-xs uppercase tracking-[0.12em] text-zinc-500">
+                  Status: {item.status}
+                </p>
+              ) : null}
+              <p className="mt-4 text-sm text-zinc-400">{item.description}</p>
 
-            <div className="mt-5 rounded-2xl border border-zinc-800 bg-zinc-900/40 p-4">
-              <p className="text-xs uppercase tracking-[0.08em] text-zinc-500">Active Users</p>
-              <p className="mt-1 text-xl font-bold text-white">{item.activeUsers.toLocaleString()}</p>
-            </div>
+              <div className="mt-5 rounded-2xl border border-zinc-800 bg-zinc-900/40 p-4">
+                <p className="text-xs uppercase tracking-[0.08em] text-zinc-500">Active Users</p>
+                <p className="mt-1 text-xl font-bold text-white">{item.activeUsers.toLocaleString()}</p>
+              </div>
 
-            <div className="mt-5 flex items-center justify-between text-xs text-zinc-400">
-              <button
-                type="button"
-                onClick={() => openEdit(item)}
-                className="rounded-full border border-zinc-700 px-4 py-2 font-semibold text-zinc-200 hover:border-emerald-400 hover:text-emerald-200"
-              >
-                Edit package
-              </button>
-              {item.id ? (
-                <span className="text-[11px] text-zinc-500">ID: {item.id}</span>
-              ) : (
-                <span className="text-[11px] text-zinc-500">API ID unavailable</span>
-              )}
-            </div>
-          </article>
-        ))}
-      </section>
+              <div className="mt-5 flex items-center justify-between text-xs text-zinc-400">
+                <button
+                  type="button"
+                  onClick={() => openEdit(item)}
+                  className="rounded-full border border-zinc-700 px-4 py-2 font-semibold text-zinc-200 hover:border-emerald-400 hover:text-emerald-200"
+                >
+                  Edit package
+                </button>
+                {item.id ? (
+                  <span className="text-[11px] text-zinc-500">ID: {item.id}</span>
+                ) : (
+                  <span className="text-[11px] text-zinc-500">API ID unavailable</span>
+                )}
+              </div>
+            </article>
+          ))}
+        </section>
+      )}
 
       {edit.open ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">

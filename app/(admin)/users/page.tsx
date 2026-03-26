@@ -6,7 +6,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAdminSearch } from "@/components/admin/AdminSearchContext";
 import StatusBadge from "@/components/admin/StatusBadge";
 import { clientApi, type ApiResult } from "@/lib/client-api";
-import { USERS } from "@/lib/admin-data";
 
 type AccountRecord = {
   id?: string;
@@ -119,16 +118,7 @@ export default function UsersPage() {
 
   const accountRows: AccountRecord[] = useMemo(() => {
     const apiRows = extractAccounts(accounts.data);
-    if (apiRows.length > 0) {
-      return apiRows;
-    }
-    return USERS.map((user) => ({
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      role: roleMap[user.plan] ?? "Customer",
-      status: user.status,
-    }));
+    return apiRows;
   }, [accounts.data]);
 
   const filteredRows = useMemo(() => {

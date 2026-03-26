@@ -1,15 +1,15 @@
 "use client";
 
 import { Pencil, Plus, Save, Search, Trash2, X } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { useAdminSearch } from "@/components/admin/AdminSearchContext";
 import StatusBadge from "@/components/admin/StatusBadge";
-import { TRANSACTIONS } from "@/lib/admin-data";
 import { clientApi, type ApiResult } from "@/lib/client-api";
 
 type TransactionRow = {
   id: string;
+  accountId?: string;
   customer: string;
   packageName: string;
   amount: string;
@@ -21,6 +21,12 @@ type ServicePayment = {
   id?: string;
   _id?: string;
   servicePaymentId?: string;
+  accountId?: string;
+  account?: string;
+  accountID?: string;
+  clientId?: string;
+  customerId?: string;
+  userId?: string;
   client?: string;
   clientName?: string;
   email?: string;
@@ -33,6 +39,15 @@ type ServicePayment = {
   date?: string;
   time?: string;
   createdAt?: string;
+};
+
+type AccountRecord = {
+  id?: string;
+  _id?: string;
+  name?: string;
+  fullName?: string;
+  email?: string;
+  username?: string;
 };
 
 type ModalState = {
@@ -102,15 +117,43 @@ function resolveId(value: ServicePayment) {
   );
 }
 
-function normalizePaymentRow(value: ServicePayment): TransactionRow {
-  return {
-    id: resolveId(value),
-    customer: value.clientName ?? value.client ?? "Unknown",
-    packageName: value.serviceName ?? value.service ?? "Service",
-    amount: formatAmount(value.price ?? value.amount),
-    paidAt: value.paidAt ?? value.date ?? value.createdAt ?? "-",
-    status: value.status !== undefined && value.status !== null ? String(value.status) : "pending",
-  };
+function resolveAccountId(value: ServicePayment) {
+  return (
+    value.accountId ||
+    value.accountID ||
+    value.account ||
+    value.clientId ||
+    value.customerId ||
+    value.userId ||
+    ""
+  );
+}
+
+function getAccountId(account: AccountRecord) {
+  if (typeof account.id === "string") {
+    return account.id;
+  }
+  if (typeof account._id === "string") {
+    return account._id;
+  }
+  return "";
+}
+
+function getAccountName(account: AccountRecord) {
+  const email = account.email ?? "";
+  if (account.name) {
+    return account.name;
+  }
+  if (account.fullName) {
+    return account.fullName;
+  }
+  if (account.username) {
+    return account.username;
+  }
+  if (email) {
+    return email.includes("@") ? email.split("@")[0] : email;
+  }
+  return "";
 }
 
 function findArray(value: unknown, depth = 0): ServicePayment[] | null {
@@ -134,6 +177,41 @@ function extractServicePayments(payload: unknown): ServicePayment[] {
   return findArray(payload) ?? [];
 }
 
+function findAccountArray(value: unknown, depth = 0): AccountRecord[] | null {
+  if (Array.isArray(value)) {
+    return value as AccountRecord[];
+  }
+  if (!value || typeof value !== "object" || depth > 2) {
+    return null;
+  }
+  const record = value as Record<string, unknown>;
+  for (const entry of Object.values(record)) {
+    const found = findAccountArray(entry, depth + 1);
+    if (found) {
+      return found;
+    }
+  }
+  return null;
+}
+
+function extractAccounts(payload: unknown): AccountRecord[] {
+  return findAccountArray(payload) ?? [];
+}
+
+function normalizePaymentRow(value: ServicePayment, accountMap: Record<string, string>): TransactionRow {
+  const accountId = resolveAccountId(value);
+  const mappedName = accountId ? accountMap[accountId] : "";
+  return {
+    id: resolveId(value),
+    accountId: accountId || undefined,
+    customer: mappedName || value.clientName || value.client || "Unknown",
+    packageName: value.serviceName ?? value.service ?? "Service",
+    amount: formatAmount(value.price ?? value.amount),
+    paidAt: value.paidAt ?? value.date ?? value.createdAt ?? "-",
+    status: value.status !== undefined && value.status !== null ? String(value.status) : "pending",
+  };
+}
+
 function extractDetail(payload: unknown): ServicePayment | null {
   if (!payload || typeof payload !== "object") {
     return null;
@@ -146,13 +224,14 @@ function extractDetail(payload: unknown): ServicePayment | null {
 }
 
 export default function TransactionsPage() {
-  const [rows, setRows] = useState<TransactionRow[]>(TRANSACTIONS);
+  const [rows, setRows] = useState<TransactionRow[]>([]);
   const [modal, setModal] = useState<ModalState>({ mode: null, rowId: null, values: emptyDraft });
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
   const { debouncedQuery: globalQuery } = useAdminSearch();
   const [detailState, setDetailState] = useState<DetailState>({ loading: false, error: null });
   const [listResult, setListResult] = useState<ApiResult<unknown>>({ data: null, error: null });
+  const [accountMap, setAccountMap] = useState<Record<string, string>>({});
 
   useEffect(() => {
     let active = true;
@@ -163,13 +242,57 @@ export default function TransactionsPage() {
       setListResult(result);
       const apiRows = extractServicePayments(result.data);
       if (apiRows.length > 0) {
-        setRows(apiRows.map(normalizePaymentRow));
+        setRows(apiRows.map((row) => normalizePaymentRow(row, accountMap)));
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [accountMap]);
+
+  useEffect(() => {
+    let active = true;
+    clientApi.get<unknown>("/api/admin/accounts").then((result) => {
+      if (!active || result.error) {
+        return;
+      }
+      const accounts = extractAccounts(result.data);
+      if (accounts.length === 0) {
+        return;
+      }
+      const nextMap: Record<string, string> = {};
+      for (const account of accounts) {
+        const accountId = getAccountId(account);
+        if (!accountId) {
+          continue;
+        }
+        const name = getAccountName(account);
+        if (!name) {
+          continue;
+        }
+        nextMap[accountId] = name;
+      }
+      if (Object.keys(nextMap).length > 0) {
+        setAccountMap(nextMap);
       }
     });
     return () => {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (Object.keys(accountMap).length === 0) {
+      return;
+    }
+    setRows((prev) =>
+      prev.map((row) =>
+        row.accountId && accountMap[row.accountId]
+          ? { ...row, customer: accountMap[row.accountId] }
+          : row,
+      ),
+    );
+  }, [accountMap]);
 
   const totals = useMemo(() => {
     const totalPaid = rows.filter((item) => getStatusTone(item.status) === "success").length;
@@ -207,7 +330,7 @@ export default function TransactionsPage() {
     }
     const detail = extractDetail(result.data);
     if (detail) {
-      setModal((prev) => ({ ...prev, values: normalizePaymentRow(detail) }));
+      setModal((prev) => ({ ...prev, values: normalizePaymentRow(detail, accountMap) }));
     }
     setDetailState({ loading: false, error: null });
   };

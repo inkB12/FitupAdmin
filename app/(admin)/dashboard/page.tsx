@@ -8,13 +8,41 @@ import KpiCard from "@/components/admin/KpiCard";
 import { useAdminSearch } from "@/components/admin/AdminSearchContext";
 import StatusBadge from "@/components/admin/StatusBadge";
 import { clientApi } from "@/lib/client-api";
-import { DASHBOARD_KPIS, TRANSACTIONS, USERS } from "@/lib/admin-data";
 
 type DashboardRecord = Record<string, unknown>;
 
 type TableSpec = {
   columns: string[];
   rows: DashboardRecord[];
+};
+
+type AccountRecord = {
+  id?: string;
+  _id?: string;
+  name?: string;
+  fullName?: string;
+  email?: string;
+  username?: string;
+  role?: string;
+  status?: string;
+  plan?: string;
+  createdAt?: string;
+};
+
+type ServicePayment = {
+  id?: string;
+  _id?: string;
+  servicePaymentId?: string;
+  client?: string;
+  clientName?: string;
+  service?: string;
+  serviceName?: string;
+  price?: number | string;
+  amount?: number | string;
+  status?: string;
+  paidAt?: string;
+  date?: string;
+  createdAt?: string;
 };
 
 const PAGE_SIZE = 6;
@@ -76,10 +104,150 @@ function renderCell(value: unknown) {
   return JSON.stringify(value);
 }
 
+function findArrayByPredicate<T>(
+  value: unknown,
+  predicate: (item: Record<string, unknown>) => boolean,
+  depth = 0
+): T[] | null {
+  if (Array.isArray(value)) {
+    const hasMatch = value.some(
+      (item) => item && typeof item === "object" && predicate(item as Record<string, unknown>)
+    );
+    return hasMatch ? (value as T[]) : null;
+  }
+  if (!value || typeof value !== "object" || depth > 2) {
+    return null;
+  }
+  const record = value as Record<string, unknown>;
+  for (const entry of Object.values(record)) {
+    const found = findArrayByPredicate<T>(entry, predicate, depth + 1);
+    if (found) {
+      return found;
+    }
+  }
+  return null;
+}
+
+function extractAccounts(payload: unknown): AccountRecord[] {
+  return (
+    findArrayByPredicate<AccountRecord>(payload, (item) => {
+      return (
+        "email" in item ||
+        "name" in item ||
+        "fullName" in item ||
+        "username" in item ||
+        "_id" in item ||
+        "id" in item
+      );
+    }) ?? []
+  );
+}
+
+function extractPayments(payload: unknown): ServicePayment[] {
+  return (
+    findArrayByPredicate<ServicePayment>(payload, (item) => {
+      return (
+        "service" in item ||
+        "serviceName" in item ||
+        "paidAt" in item ||
+        "price" in item ||
+        "amount" in item
+      );
+    }) ?? []
+  );
+}
+
+function getAccountName(account: AccountRecord) {
+  if (account.name) {
+    return account.name;
+  }
+  if (account.fullName) {
+    return account.fullName;
+  }
+  if (account.username) {
+    return account.username;
+  }
+  if (account.email) {
+    return account.email.includes("@") ? account.email.split("@")[0] : account.email;
+  }
+  return "User";
+}
+
+function formatCurrency(value: number) {
+  const formatter = new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  });
+  return formatter.format(value);
+}
+
+function parseAmount(value: number | string | undefined) {
+  if (typeof value === "number") {
+    return value;
+  }
+  if (typeof value === "string") {
+    const cleaned = value.replace(/[^0-9.-]+/g, "");
+    const parsed = Number.parseFloat(cleaned);
+    return Number.isNaN(parsed) ? 0 : parsed;
+  }
+  return 0;
+}
+
+function formatPaymentAmount(value: number | string | undefined) {
+  if (value === undefined || value === null || value === "") {
+    return "-";
+  }
+  if (typeof value === "number") {
+    return formatCurrency(value);
+  }
+  return value;
+}
+
+function getStatusTone(status: string | number | null | undefined): "success" | "warning" | "neutral" {
+  const normalized = String(status ?? "").toLowerCase();
+  if (normalized.includes("paid") || normalized.includes("complete") || normalized.includes("success")) {
+    return "success";
+  }
+  if (normalized.includes("refund") || normalized.includes("cancel") || normalized.includes("fail")) {
+    return "warning";
+  }
+  return "neutral";
+}
+
+type KpiCardSpec = {
+  title: string;
+  value: string;
+  delta: string;
+  trend: "up" | "down";
+  icon: "users" | "calendar" | "wallet" | "activity";
+};
+
+function extractKpis(payload: unknown): KpiCardSpec[] {
+  const raw = findArrayByPredicate<Record<string, unknown>>(payload, (item) => {
+    return ("title" in item || "label" in item) && "value" in item;
+  });
+  if (!raw) {
+    return [];
+  }
+  const fallbackIcons: KpiCardSpec["icon"][] = ["users", "wallet", "activity", "calendar"];
+  return raw.slice(0, 4).map((item, index) => {
+    const title = String(item.title ?? item.label ?? "KPI");
+    const value = item.value === undefined || item.value === null ? "-" : String(item.value);
+    const delta = item.delta ? String(item.delta) : "Live data";
+    const trend = item.trend === "down" ? "down" : "up";
+    const icon =
+      item.icon === "users" || item.icon === "wallet" || item.icon === "activity" || item.icon === "calendar"
+        ? item.icon
+        : fallbackIcons[index % fallbackIcons.length];
+    return { title, value, delta, trend, icon };
+  });
+}
+
 export default function DashboardPage() {
-  const latestUsers = USERS.slice(0, 4);
-  const latestTransactions = TRANSACTIONS.slice(0, 4);
   const [rawDashboard, setRawDashboard] = useState<unknown>(null);
+  const [accounts, setAccounts] = useState<AccountRecord[]>([]);
+  const [payments, setPayments] = useState<ServicePayment[]>([]);
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
   const { debouncedQuery: globalQuery } = useAdminSearch();
@@ -90,6 +258,32 @@ export default function DashboardPage() {
       if (active) {
         setRawDashboard(result.data ?? null);
       }
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    clientApi.get<unknown>("/api/admin/accounts").then((result) => {
+      if (!active || result.error) {
+        return;
+      }
+      setAccounts(extractAccounts(result.data));
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    clientApi.get<unknown>("/api/service-payments/admin/all").then((result) => {
+      if (!active || result.error) {
+        return;
+      }
+      setPayments(extractPayments(result.data));
     });
     return () => {
       active = false;
@@ -117,6 +311,88 @@ export default function DashboardPage() {
   const currentPage = Math.min(page, totalPages);
   const pageRows = filteredRows.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
   const pageNumbers = buildPageNumbers(currentPage, totalPages);
+
+  const kpis = useMemo(() => {
+    const extracted = extractKpis(rawDashboard);
+    if (extracted.length > 0) {
+      return extracted;
+    }
+    if (accounts.length === 0 && payments.length === 0) {
+      return [] as KpiCardSpec[];
+    }
+    const activeUsers = accounts.filter((account) =>
+      String(account.status ?? "").toLowerCase().includes("active")
+    ).length;
+    const totalUsers = accounts.length;
+    const paidCount = payments.filter((payment) => getStatusTone(payment.status) === "success").length;
+    const warningCount = payments.filter((payment) => getStatusTone(payment.status) === "warning").length;
+    const pendingCount = Math.max(0, payments.length - paidCount - warningCount);
+    const revenueTotal = payments.reduce((sum, payment) => {
+      return sum + parseAmount(payment.price ?? payment.amount);
+    }, 0);
+    const averageRevenue = payments.length > 0 ? revenueTotal / payments.length : 0;
+
+    return [
+      {
+        title: "Total Users",
+        value: String(totalUsers),
+        delta: `Active: ${activeUsers}`,
+        trend: activeUsers >= totalUsers - activeUsers ? "up" : "down",
+        icon: "users",
+      },
+      {
+        title: "Transactions",
+        value: String(payments.length),
+        delta: `Paid: ${paidCount}`,
+        trend: paidCount >= payments.length - paidCount ? "up" : "down",
+        icon: "activity",
+      },
+      {
+        title: "Revenue",
+        value: formatCurrency(revenueTotal),
+        delta: `Avg: ${formatCurrency(averageRevenue)}`,
+        trend: revenueTotal >= 0 ? "up" : "down",
+        icon: "wallet",
+      },
+      {
+        title: "Pending Payments",
+        value: String(pendingCount),
+        delta: `Refunded: ${warningCount}`,
+        trend: pendingCount === 0 ? "up" : "down",
+        icon: "calendar",
+      },
+    ];
+  }, [rawDashboard, accounts, payments]);
+
+  const latestUsers = useMemo(() => {
+    if (accounts.length === 0) {
+      return [] as AccountRecord[];
+    }
+    const sorted = [...accounts].sort((a, b) => {
+      const left = Date.parse(a.createdAt ?? "");
+      const right = Date.parse(b.createdAt ?? "");
+      if (Number.isNaN(left) || Number.isNaN(right)) {
+        return 0;
+      }
+      return right - left;
+    });
+    return sorted.slice(0, 4);
+  }, [accounts]);
+
+  const latestTransactions = useMemo(() => {
+    if (payments.length === 0) {
+      return [] as ServicePayment[];
+    }
+    const sorted = [...payments].sort((a, b) => {
+      const left = Date.parse(a.paidAt ?? a.date ?? a.createdAt ?? "");
+      const right = Date.parse(b.paidAt ?? b.date ?? b.createdAt ?? "");
+      if (Number.isNaN(left) || Number.isNaN(right)) {
+        return 0;
+      }
+      return right - left;
+    });
+    return sorted.slice(0, 4);
+  }, [payments]);
 
   return (
     <div className="space-y-8">
@@ -210,84 +486,111 @@ export default function DashboardPage() {
           <div className="flex flex-col gap-2">
             <p className="text-sm font-semibold text-zinc-200">Dashboard data is unavailable.</p>
             <p className="text-xs text-zinc-500">
-              Showing default KPIs below until the API connects.
+              Once the API responds, the overview table will appear here.
             </p>
-          </div>
-          <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-            {DASHBOARD_KPIS.map((item) => (
-              <div
-                key={`fallback-${item.title}`}
-                className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-4"
-              >
-                <p className="text-xs uppercase tracking-[0.1em] text-zinc-500">{item.title}</p>
-                <p className="mt-2 text-xl font-black text-white">{item.value}</p>
-                <p className="mt-1 text-xs text-zinc-500">{item.delta}</p>
-              </div>
-            ))}
           </div>
         </section>
       )}
 
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {DASHBOARD_KPIS.map((item) => (
-          <KpiCard
-            key={item.title}
-            title={item.title}
-            value={item.value}
-            delta={item.delta}
-            trend={item.trend}
-            icon={item.icon}
-          />
-        ))}
-      </section>
+      {kpis.length > 0 ? (
+        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {kpis.map((item) => (
+            <KpiCard
+              key={item.title}
+              title={item.title}
+              value={item.value}
+              delta={item.delta}
+              trend={item.trend}
+              icon={item.icon}
+            />
+          ))}
+        </section>
+      ) : null}
 
       <section className="grid gap-6 xl:grid-cols-2">
         <article className="rounded-3xl border border-zinc-800 bg-[#121212] p-6">
           <div className="mb-4 flex items-center justify-between">
             <h3 className="text-lg font-extrabold">Recent Users</h3>
-            <Link href="/users" className="inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-[0.1em] text-[#d68c45]">
+            <Link
+              href="/users"
+              className="inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-[0.1em] text-[#d68c45]"
+            >
               View all <ArrowUpRight className="h-3.5 w-3.5" />
             </Link>
           </div>
 
-          <div className="space-y-3">
-            {latestUsers.map((user) => (
-              <div key={user.id} className="flex items-center justify-between rounded-2xl border border-zinc-800 bg-zinc-900/40 p-3">
-                <div>
-                  <p className="font-semibold text-white">{user.name}</p>
-                  <p className="text-xs text-zinc-400">{user.email}</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-xs text-zinc-500">{user.plan}</p>
-                  <StatusBadge label={user.status} tone={user.status === "active" ? "success" : "warning"} />
-                </div>
-              </div>
-            ))}
-          </div>
+          {latestUsers.length === 0 ? (
+            <p className="text-xs text-zinc-500">No user data yet.</p>
+          ) : (
+            <div className="space-y-3">
+              {latestUsers.map((user, index) => {
+                const name = getAccountName(user);
+                const email = user.email ?? "-";
+                const role = user.role ?? user.plan ?? "Account";
+                const status = user.status ?? "active";
+                const rowKey = user.id ?? user._id ?? `${name}-${index}`;
+                return (
+                  <div
+                    key={rowKey}
+                    className="flex items-center justify-between rounded-2xl border border-zinc-800 bg-zinc-900/40 p-3"
+                  >
+                    <div>
+                      <p className="font-semibold text-white">{name}</p>
+                      <p className="text-xs text-zinc-400">{email}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs text-zinc-500">{role}</p>
+                      <StatusBadge
+                        label={status}
+                        tone={String(status).toLowerCase() === "active" ? "success" : "warning"}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </article>
 
         <article className="rounded-3xl border border-zinc-800 bg-[#121212] p-6">
           <div className="mb-4 flex items-center justify-between">
             <h3 className="text-lg font-extrabold">Latest Transactions</h3>
-            <Link href="/transactions" className="inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-[0.1em] text-[#d68c45]">
+            <Link
+              href="/transactions"
+              className="inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-[0.1em] text-[#d68c45]"
+            >
               View all <ArrowUpRight className="h-3.5 w-3.5" />
             </Link>
           </div>
 
-          <div className="space-y-3">
-            {latestTransactions.map((item) => (
-              <div key={item.id} className="flex items-center justify-between rounded-2xl border border-zinc-800 bg-zinc-900/40 p-3">
-                <div>
-                  <p className="font-semibold text-white">{item.customer}</p>
-                  <p className="text-xs text-zinc-400">{item.packageName}</p>
-                </div>
-                <div className="text-right">
-                  <p className="font-semibold text-white">{item.amount}</p>
-                  <StatusBadge label={item.status} tone={item.status === "paid" ? "success" : "warning"} />
-                </div>
-              </div>
-            ))}
-          </div>
+          {latestTransactions.length === 0 ? (
+            <p className="text-xs text-zinc-500">No transactions yet.</p>
+          ) : (
+            <div className="space-y-3">
+              {latestTransactions.map((item, index) => {
+                const customer = item.clientName ?? item.client ?? "Unknown";
+                const service = item.serviceName ?? item.service ?? "Service";
+                const amount = formatPaymentAmount(item.price ?? item.amount);
+                const status = item.status ?? "pending";
+                const rowKey = item.id ?? item._id ?? item.servicePaymentId ?? `${service}-${index}`;
+                return (
+                  <div
+                    key={rowKey}
+                    className="flex items-center justify-between rounded-2xl border border-zinc-800 bg-zinc-900/40 p-3"
+                  >
+                    <div>
+                      <p className="font-semibold text-white">{customer}</p>
+                      <p className="text-xs text-zinc-400">{service}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-semibold text-white">{amount}</p>
+                      <StatusBadge label={String(status)} tone={getStatusTone(status)} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </article>
       </section>
     </div>
