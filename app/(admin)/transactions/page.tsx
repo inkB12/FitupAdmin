@@ -1,44 +1,38 @@
 "use client";
 
-import { Pencil, Plus, Save, Search, Trash2, X } from "lucide-react";
+import { Eye, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
-import { useAdminSearch } from "@/components/admin/AdminSearchContext";
+import Pagination from "@/components/admin/Pagination";
+import PageHero from "@/components/admin/PageHero";
+import PageToolbar from "@/components/admin/PageToolbar";
 import StatusBadge from "@/components/admin/StatusBadge";
+import { useAdminSearch } from "@/components/admin/AdminSearchContext";
+import { matchesSearch } from "@/lib/admin-ui";
 import { clientApi, type ApiResult } from "@/lib/client-api";
 
-type TransactionRow = {
-  id: string;
-  accountId?: string;
-  customer: string;
-  packageName: string;
-  amount: string;
-  paidAt: string;
-  status: string;
+type ServicePaymentApiRow = {
+  servicePaymentId?: string;
+  amount?: number | string | null;
+  serviceType?: number | string | null;
+  paymentDate?: string | null;
+  status?: number | string | null;
+  premiumId?: string | null;
+  bookingId?: string | null;
+  accountId?: string | null;
 };
 
-type ServicePayment = {
-  id?: string;
-  _id?: string;
-  servicePaymentId?: string;
-  accountId?: string;
-  account?: string;
-  accountID?: string;
-  clientId?: string;
-  customerId?: string;
-  userId?: string;
-  client?: string;
-  clientName?: string;
-  email?: string;
-  service?: string;
-  serviceName?: string;
-  price?: number | string;
-  amount?: number | string;
-  status?: string;
-  paidAt?: string;
-  date?: string;
-  time?: string;
-  createdAt?: string;
+type ServicePaymentRow = {
+  id: string;
+  accountId: string;
+  accountName: string;
+  amount: number;
+  serviceType: number;
+  serviceLabel: string;
+  paymentDate: string;
+  status: number;
+  premiumId: string | null;
+  bookingId: string | null;
 };
 
 type AccountRecord = {
@@ -50,83 +44,111 @@ type AccountRecord = {
   username?: string;
 };
 
-type ModalState = {
-  mode: "create" | "edit" | null;
-  rowId: string | null;
-  values: TransactionRow;
+type PremiumTypeRecord = {
+  id?: string;
+  describe?: string | null;
 };
 
-type DetailState = {
+type PremiumPaymentDetail = {
+  premiumPaymentId?: string;
+  price?: number | string | null;
+  premiumId?: string | null;
+  premiumTypeId?: string | null;
+  accountId?: string | null;
+  startDate?: string | null;
+  endDate?: string | null;
+  premiumStatus?: number | string | null;
+};
+
+type BookingPaymentDetail = {
+  bookingPaymentId?: string;
+  price?: number | string | null;
+  bookingId?: string | null;
+  accountId?: string | null;
+  slotForBookingId?: string | null;
+  total?: number | string | null;
+  note?: string | null;
+  bookingStatus?: number | string | null;
+};
+
+type ServicePaymentDetail = {
+  servicePaymentId?: string;
+  amount?: number | string | null;
+  serviceType?: number | string | null;
+  paymentDate?: string | null;
+  status?: number | string | null;
+  premiumPaymentDetail?: PremiumPaymentDetail | null;
+  bookingPaymentDetail?: BookingPaymentDetail | null;
+};
+
+type DetailModalState = {
+  open: boolean;
   loading: boolean;
   error: string | null;
+  row: ServicePaymentRow | null;
+  detail: ServicePaymentDetail | null;
 };
 
 const PAGE_SIZE = 6;
 
-function buildPageNumbers(current: number, total: number) {
-  if (total <= 1) {
-    return [1];
+function findArray(value: unknown, depth = 0): ServicePaymentApiRow[] | null {
+  if (Array.isArray(value)) {
+    return value as ServicePaymentApiRow[];
   }
-  const pages = new Set<number>();
-  pages.add(1);
-  pages.add(total);
-  for (let i = current - 1; i <= current + 1; i += 1) {
-    if (i > 1 && i < total) {
-      pages.add(i);
+
+  if (!value || typeof value !== "object" || depth > 2) {
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+  for (const entry of Object.values(record)) {
+    const found = findArray(entry, depth + 1);
+    if (found) {
+      return found;
     }
   }
-  return Array.from(pages).sort((a, b) => a - b);
+
+  return null;
 }
 
-const emptyDraft: TransactionRow = {
-  id: "",
-  customer: "",
-  packageName: "",
-  amount: "",
-  paidAt: "",
-  status: "pending",
-};
+function findAccountArray(value: unknown, depth = 0): AccountRecord[] | null {
+  if (Array.isArray(value)) {
+    return value as AccountRecord[];
+  }
 
-function getStatusTone(status: string | number | null | undefined): "success" | "warning" | "neutral" {
-  const value = String(status ?? "").toLowerCase();
-  if (value.includes("paid") || value.includes("complete") || value.includes("success")) {
-    return "success";
+  if (!value || typeof value !== "object" || depth > 2) {
+    return null;
   }
-  if (value.includes("refund") || value.includes("cancel") || value.includes("fail")) {
-    return "warning";
+
+  const record = value as Record<string, unknown>;
+  for (const entry of Object.values(record)) {
+    const found = findAccountArray(entry, depth + 1);
+    if (found) {
+      return found;
+    }
   }
-  return "neutral";
+
+  return null;
 }
 
-function formatAmount(amount: number | string | undefined) {
-  if (amount === undefined || amount === null || amount === "") {
-    return "-";
+function findPremiumTypeArray(value: unknown, depth = 0): PremiumTypeRecord[] | null {
+  if (Array.isArray(value)) {
+    return value as PremiumTypeRecord[];
   }
-  if (typeof amount === "number") {
-    return `$${amount}`;
+
+  if (!value || typeof value !== "object" || depth > 2) {
+    return null;
   }
-  return amount;
-}
 
-function resolveId(value: ServicePayment) {
-  return (
-    value.id ||
-    value._id ||
-    value.servicePaymentId ||
-    ""
-  );
-}
+  const record = value as Record<string, unknown>;
+  for (const entry of Object.values(record)) {
+    const found = findPremiumTypeArray(entry, depth + 1);
+    if (found) {
+      return found;
+    }
+  }
 
-function resolveAccountId(value: ServicePayment) {
-  return (
-    value.accountId ||
-    value.accountID ||
-    value.account ||
-    value.clientId ||
-    value.customerId ||
-    value.userId ||
-    ""
-  );
+  return null;
 }
 
 function getAccountId(account: AccountRecord) {
@@ -141,6 +163,7 @@ function getAccountId(account: AccountRecord) {
 
 function getAccountName(account: AccountRecord) {
   const email = account.email ?? "";
+
   if (account.name) {
     return account.name;
   }
@@ -153,295 +176,397 @@ function getAccountName(account: AccountRecord) {
   if (email) {
     return email.includes("@") ? email.split("@")[0] : email;
   }
-  return "";
+
+  return "Unknown";
 }
 
-function findArray(value: unknown, depth = 0): ServicePayment[] | null {
-  if (Array.isArray(value)) {
-    return value as ServicePayment[];
+function toNumber(value: number | string | null | undefined) {
+  if (typeof value === "number") {
+    return value;
   }
-  if (!value || typeof value !== "object" || depth > 2) {
-    return null;
+  if (typeof value === "string") {
+    const parsed = Number.parseFloat(value);
+    return Number.isNaN(parsed) ? 0 : parsed;
   }
-  const record = value as Record<string, unknown>;
-  for (const entry of Object.values(record)) {
-    const found = findArray(entry, depth + 1);
-    if (found) {
-      return found;
-    }
-  }
-  return null;
+  return 0;
 }
 
-function extractServicePayments(payload: unknown): ServicePayment[] {
-  return findArray(payload) ?? [];
+function getServiceTypeLabel(serviceType: number) {
+  return serviceType === 1 ? "Premium" : "BookingPT";
 }
 
-function findAccountArray(value: unknown, depth = 0): AccountRecord[] | null {
-  if (Array.isArray(value)) {
-    return value as AccountRecord[];
+function getServiceTypeStyles(serviceType: number) {
+  return serviceType === 1
+    ? {
+        badge: "border-violet-400/30 bg-violet-400/12 text-violet-100",
+        accent: "text-violet-200",
+        panel: "border-violet-400/20 bg-violet-400/8",
+      }
+    : {
+        badge: "border-cyan-400/30 bg-cyan-400/10 text-cyan-100",
+        accent: "text-cyan-100",
+        panel: "border-cyan-400/20 bg-cyan-400/8",
+      };
+}
+
+function getStatusTone(status: number) {
+  if (status === 1) {
+    return "success";
   }
-  if (!value || typeof value !== "object" || depth > 2) {
-    return null;
+  if (status === 3) {
+    return "warning";
   }
-  const record = value as Record<string, unknown>;
-  for (const entry of Object.values(record)) {
-    const found = findAccountArray(entry, depth + 1);
-    if (found) {
-      return found;
-    }
+  return "neutral";
+}
+
+function getStatusLabel(status: number) {
+  if (status === 1) {
+    return "Paid";
   }
-  return null;
+  if (status === 3) {
+    return "Failed";
+  }
+  return `Status ${status}`;
+}
+
+function formatPoints(amount: number) {
+  return `${new Intl.NumberFormat("en-US", {
+    maximumFractionDigits: 0,
+  }).format(amount)} P`;
+}
+
+function formatDate(value: string | null | undefined) {
+  if (!value) {
+    return "-";
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return value;
+  }
+
+  return new Intl.DateTimeFormat("vi-VN", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(parsed);
 }
 
 function extractAccounts(payload: unknown): AccountRecord[] {
   return findAccountArray(payload) ?? [];
 }
 
-function normalizePaymentRow(value: ServicePayment, accountMap: Record<string, string>): TransactionRow {
-  const accountId = resolveAccountId(value);
-  const mappedName = accountId ? accountMap[accountId] : "";
-  return {
-    id: resolveId(value),
-    accountId: accountId || undefined,
-    customer: mappedName || value.clientName || value.client || "Unknown",
-    packageName: value.serviceName ?? value.service ?? "Service",
-    amount: formatAmount(value.price ?? value.amount),
-    paidAt: value.paidAt ?? value.date ?? value.createdAt ?? "-",
-    status: value.status !== undefined && value.status !== null ? String(value.status) : "pending",
-  };
+function extractPremiumTypes(payload: unknown): PremiumTypeRecord[] {
+  return findPremiumTypeArray(payload) ?? [];
 }
 
-function extractDetail(payload: unknown): ServicePayment | null {
+function normalizeRows(payload: unknown, accountMap: Record<string, string>) {
+  const rows = findArray(payload) ?? [];
+
+  return rows
+    .map((row) => {
+      const id = typeof row.servicePaymentId === "string" ? row.servicePaymentId : "";
+      const accountId = typeof row.accountId === "string" ? row.accountId : "";
+      const serviceType = toNumber(row.serviceType);
+      const amount = toNumber(row.amount);
+      const status = toNumber(row.status);
+
+      return {
+        id,
+        accountId,
+        accountName: accountMap[accountId] ?? accountId ?? "Unknown",
+        amount,
+        serviceType,
+        serviceLabel: getServiceTypeLabel(serviceType),
+        paymentDate: row.paymentDate ?? "-",
+        status,
+        premiumId: typeof row.premiumId === "string" ? row.premiumId : null,
+        bookingId: typeof row.bookingId === "string" ? row.bookingId : null,
+      } satisfies ServicePaymentRow;
+    })
+    .filter((row) => row.id);
+}
+
+function extractDetail(payload: unknown): ServicePaymentDetail | null {
   if (!payload || typeof payload !== "object") {
     return null;
   }
+
   const record = payload as Record<string, unknown>;
   if (record.data && typeof record.data === "object") {
-    return extractDetail(record.data);
+    return record.data as ServicePaymentDetail;
   }
-  return record as ServicePayment;
+
+  return record as ServicePaymentDetail;
+}
+
+function DetailItem({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="admin-panel rounded-2xl p-4">
+      <p className="text-xs uppercase tracking-[0.12em] text-[var(--admin-muted)]">{label}</p>
+      <p className="mt-2 break-all text-sm font-semibold text-white">{value || "-"}</p>
+    </div>
+  );
 }
 
 export default function TransactionsPage() {
-  const [rows, setRows] = useState<TransactionRow[]>([]);
-  const [modal, setModal] = useState<ModalState>({ mode: null, rowId: null, values: emptyDraft });
+  const [rows, setRows] = useState<ServicePaymentRow[]>([]);
   const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [serviceFilter, setServiceFilter] = useState("all");
   const [page, setPage] = useState(1);
-  const { debouncedQuery: globalQuery } = useAdminSearch();
-  const [detailState, setDetailState] = useState<DetailState>({ loading: false, error: null });
   const [listResult, setListResult] = useState<ApiResult<unknown>>({ data: null, error: null });
   const [accountMap, setAccountMap] = useState<Record<string, string>>({});
+  const [premiumTypeMap, setPremiumTypeMap] = useState<Record<string, string>>({});
+  const { debouncedQuery: globalQuery } = useAdminSearch();
+  const [detailModal, setDetailModal] = useState<DetailModalState>({
+    open: false,
+    loading: false,
+    error: null,
+    row: null,
+    detail: null,
+  });
 
   useEffect(() => {
     let active = true;
-    clientApi.get<unknown>("/api/service-payments/admin/all").then((result) => {
-      if (!active) {
-        return;
-      }
-      setListResult(result);
-      const apiRows = extractServicePayments(result.data);
-      if (apiRows.length > 0) {
-        setRows(apiRows.map((row) => normalizePaymentRow(row, accountMap)));
-      }
-    });
-    return () => {
-      active = false;
-    };
-  }, [accountMap]);
 
-  useEffect(() => {
-    let active = true;
     clientApi.get<unknown>("/api/admin/accounts").then((result) => {
       if (!active || result.error) {
         return;
       }
+
       const accounts = extractAccounts(result.data);
-      if (accounts.length === 0) {
-        return;
-      }
       const nextMap: Record<string, string> = {};
       for (const account of accounts) {
-        const accountId = getAccountId(account);
-        if (!accountId) {
-          continue;
+        const id = getAccountId(account);
+        if (id) {
+          nextMap[id] = getAccountName(account);
         }
-        const name = getAccountName(account);
-        if (!name) {
-          continue;
-        }
-        nextMap[accountId] = name;
       }
-      if (Object.keys(nextMap).length > 0) {
-        setAccountMap(nextMap);
-      }
+      setAccountMap(nextMap);
     });
+
     return () => {
       active = false;
     };
   }, []);
 
   useEffect(() => {
-    if (Object.keys(accountMap).length === 0) {
-      return;
-    }
-    setRows((prev) =>
-      prev.map((row) =>
-        row.accountId && accountMap[row.accountId]
-          ? { ...row, customer: accountMap[row.accountId] }
-          : row,
-      ),
-    );
+    let active = true;
+
+    clientApi.get<unknown>("/api/premium/admin/types").then((result) => {
+      if (!active || result.error) {
+        return;
+      }
+
+      const premiumTypes = extractPremiumTypes(result.data);
+      const nextMap: Record<string, string> = {};
+      for (const premiumType of premiumTypes) {
+        if (premiumType.id) {
+          nextMap[premiumType.id] = premiumType.describe?.trim() || premiumType.id;
+        }
+      }
+      setPremiumTypeMap(nextMap);
+    });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+
+    clientApi.get<unknown>("/api/service-payments/admin/all").then((result) => {
+      if (!active) {
+        return;
+      }
+      setListResult(result);
+      setRows(normalizeRows(result.data, accountMap));
+    });
+
+    return () => {
+      active = false;
+    };
   }, [accountMap]);
 
   const totals = useMemo(() => {
-    const totalPaid = rows.filter((item) => getStatusTone(item.status) === "success").length;
-    const totalRefunded = rows.filter((item) => getStatusTone(item.status) === "warning").length;
-    return { totalPaid, totalRefunded };
+    const paid = rows.filter((item) => item.status === 1).length;
+    const failed = rows.filter((item) => item.status === 3).length;
+    const premium = rows.filter((item) => item.serviceType === 1).length;
+    return { paid, failed, premium };
   }, [rows]);
 
+  const combinedQuery = useMemo(
+    () => [query, globalQuery].filter(Boolean).join(" ").trim().toLowerCase(),
+    [globalQuery, query]
+  );
+
   const filteredRows = useMemo(() => {
-    const term = [query, globalQuery].filter(Boolean).join(" ").trim().toLowerCase();
-    if (!term) {
-      return rows;
-    }
-    return rows.filter((row) => JSON.stringify(row).toLowerCase().includes(term));
-  }, [rows, query, globalQuery]);
+    return rows.filter((row) => {
+      const matchesStatus = statusFilter === "all" || String(row.status) === statusFilter;
+      const matchesService = serviceFilter === "all" || String(row.serviceType) === serviceFilter;
+      const searchPayload = {
+        ...row,
+        amountFormatted: formatPoints(row.amount),
+        paymentDateFormatted: formatDate(row.paymentDate),
+        statusLabel: getStatusLabel(row.status),
+      };
+
+      return matchesStatus && matchesService && matchesSearch(searchPayload, combinedQuery);
+    });
+  }, [combinedQuery, rows, serviceFilter, statusFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
   const pageRows = filteredRows.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
-  const pageNumbers = buildPageNumbers(currentPage, totalPages);
 
-  const openCreate = () => {
-    setModal({ mode: "create", rowId: null, values: emptyDraft });
-  };
+  const openDetail = async (row: ServicePaymentRow) => {
+    setDetailModal({
+      open: true,
+      loading: true,
+      error: null,
+      row,
+      detail: null,
+    });
 
-  const openEdit = async (row: TransactionRow) => {
-    setModal({ mode: "edit", rowId: row.id, values: row });
-    if (!row.id) {
-      return;
-    }
-    setDetailState({ loading: true, error: null });
     const result = await clientApi.get<unknown>(`/api/service-payments/admin/${row.id}`);
     if (result.error) {
-      setDetailState({ loading: false, error: result.error });
+      setDetailModal({
+        open: true,
+        loading: false,
+        error: result.error,
+        row,
+        detail: null,
+      });
       return;
     }
-    const detail = extractDetail(result.data);
-    if (detail) {
-      setModal((prev) => ({ ...prev, values: normalizePaymentRow(detail, accountMap) }));
-    }
-    setDetailState({ loading: false, error: null });
+
+    setDetailModal({
+      open: true,
+      loading: false,
+      error: null,
+      row,
+      detail: extractDetail(result.data),
+    });
   };
 
-  const closeModal = () => {
-    setModal({ mode: null, rowId: null, values: emptyDraft });
-    setDetailState({ loading: false, error: null });
+  const closeDetail = () => {
+    setDetailModal({
+      open: false,
+      loading: false,
+      error: null,
+      row: null,
+      detail: null,
+    });
   };
 
-  const saveModal = () => {
-    if (modal.mode === "create") {
-      if (!modal.values.customer) {
-        return;
-      }
-      setRows((prev) => [modal.values, ...prev]);
-    }
-    if (modal.mode === "edit" && modal.rowId) {
-      setRows((prev) => prev.map((row) => (row.id === modal.rowId ? modal.values : row)));
-    }
-    closeModal();
-  };
-
-  const removeRow = (id: string) => {
-    setRows((prev) => prev.filter((row) => row.id !== id));
-  };
+  const premiumDetail = detailModal.detail?.premiumPaymentDetail ?? null;
+  const bookingDetail = detailModal.detail?.bookingPaymentDetail ?? null;
+  const premiumTypeLabel =
+    premiumDetail?.premiumTypeId ? premiumTypeMap[premiumDetail.premiumTypeId] ?? premiumDetail.premiumTypeId : "-";
 
   return (
     <div className="space-y-6">
-      <section className="grid gap-4 md:grid-cols-2">
-        <article className="rounded-3xl border border-zinc-800 bg-[#121212] p-5">
-          <p className="text-xs uppercase tracking-[0.1em] text-zinc-500">Paid Transactions</p>
-          <p className="mt-2 text-3xl font-black text-white">{totals.totalPaid}</p>
-        </article>
+      <PageHero
+        eyebrow="Finance Activity"
+        title="Service Payment"
+        description="Track all service payments from the admin API and inspect details differently for Premium and BookingPT records."
+        stats={[
+          { label: "Payments", value: String(rows.length), tone: "info" },
+          { label: "Paid", value: String(totals.paid), tone: "success" },
+          { label: "Failed", value: String(totals.failed), tone: "warning" },
+          { label: "Premium", value: String(totals.premium), tone: "accent" },
+        ]}
+      />
 
-        <article className="rounded-3xl border border-zinc-800 bg-[#121212] p-5">
-          <p className="text-xs uppercase tracking-[0.1em] text-zinc-500">Refunded Transactions</p>
-          <p className="mt-2 text-3xl font-black text-white">{totals.totalRefunded}</p>
-        </article>
-      </section>
+      <section className="admin-surface rounded-3xl p-6 md:p-7">
+        <PageToolbar
+          className="mb-5"
+          searchValue={query}
+          onSearchChange={(value) => {
+            setQuery(value);
+            setPage(1);
+          }}
+          searchPlaceholder="Search account, payment ID, booking, premium, or amount"
+          resultLabel={`Showing ${pageRows.length} of ${filteredRows.length} service payments`}
+          filters={[
+            {
+              label: "Service Type",
+              value: serviceFilter,
+              onChange: (value) => {
+                setServiceFilter(value);
+                setPage(1);
+              },
+              options: [
+                { label: "All service types", value: "all" },
+                { label: "BookingPT", value: "0" },
+                { label: "Premium", value: "1" },
+              ],
+            },
+            {
+              label: "Status",
+              value: statusFilter,
+              onChange: (value) => {
+                setStatusFilter(value);
+                setPage(1);
+              },
+              options: [
+                { label: "All status", value: "all" },
+                { label: "Paid", value: "1" },
+                { label: "Failed", value: "3" },
+              ],
+            },
+          ]}
+        />
 
-      <section className="rounded-3xl border border-zinc-800 bg-[#121212] p-6 md:p-7">
-        <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <div>
-            <h2 className="text-2xl font-black">Transactions</h2>
-            {listResult.error ? (
-              <p className="mt-1 text-xs text-rose-300">{listResult.error}</p>
-            ) : null}
-          </div>
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-2 rounded-2xl border border-zinc-800 bg-zinc-900/50 px-4 py-2 text-sm text-zinc-300">
-              <Search className="h-4 w-4 text-zinc-500" />
-              <input
-                value={query}
-                onChange={(event) => {
-                  setQuery(event.target.value);
-                  setPage(1);
-                }}
-                placeholder="Search transactions"
-                className="w-full bg-transparent text-sm outline-none placeholder:text-zinc-500"
-              />
-            </div>
-            <button
-              type="button"
-              onClick={openCreate}
-              className="inline-flex items-center gap-2 rounded-full border border-zinc-700 px-4 py-1.5 text-xs font-semibold text-zinc-200 hover:border-emerald-400 hover:text-emerald-300"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              Create
-            </button>
-          </div>
-        </div>
+        {listResult.error ? <p className="mb-4 text-sm text-rose-300">{listResult.error}</p> : null}
 
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[880px] text-left text-sm">
+          <table className="w-full min-w-[980px] text-left text-sm">
             <thead>
-              <tr className="border-b border-zinc-800 text-xs uppercase tracking-[0.08em] text-zinc-500">
-                <th className="pb-3">Customer</th>
-                <th className="pb-3">Service</th>
-                <th className="pb-3">Amount</th>
-                <th className="pb-3">Paid At</th>
-                <th className="pb-3">Status</th>
-                <th className="pb-3 text-right">Actions</th>
+              <tr className="border-b border-white/8 text-[11px] uppercase tracking-[0.14em] text-[var(--admin-muted)]">
+                <th className="pb-3 pr-4 font-semibold">Account</th>
+                <th className="pb-3 pr-4 font-semibold">Service Type</th>
+                <th className="pb-3 pr-4 font-semibold">Amount</th>
+                <th className="pb-3 pr-4 font-semibold">Payment Date</th>
+                <th className="pb-3 pr-4 font-semibold">Status</th>
+                <th className="pb-3 pr-4 font-semibold">Reference</th>
+                <th className="pb-3 text-right font-semibold">Actions</th>
               </tr>
             </thead>
             <tbody>
               {pageRows.map((item) => (
-                <tr key={item.id} className="border-b border-zinc-800/70 text-zinc-200">
-                  <td className="py-3 font-semibold text-white">{item.customer}</td>
-                  <td className="py-3">{item.packageName}</td>
-                  <td className="py-3">{item.amount}</td>
-                  <td className="py-3">{item.paidAt}</td>
-                  <td className="py-3">
-                    <StatusBadge label={item.status} tone={getStatusTone(item.status)} />
+                <tr key={item.id} className="border-b border-white/8 text-[var(--admin-soft)]">
+                  <td className="py-4 pr-4">
+                    <p className="font-semibold text-white">{item.accountName || "Unknown"}</p>
+                    <p className="mt-1 text-xs text-[var(--admin-muted)]">{item.accountId}</p>
                   </td>
-                  <td className="py-3 text-right">
-                    <div className="inline-flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => openEdit(item)}
-                        className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-900/60 text-zinc-300 hover:text-emerald-200"
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => removeRow(item.id)}
-                        className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-900/60 text-zinc-300 hover:text-rose-300"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
+                  <td className="py-4 pr-4">
+                    <span
+                      className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.08em] ${
+                        getServiceTypeStyles(item.serviceType).badge
+                      }`}
+                    >
+                      {item.serviceLabel}
+                    </span>
+                  </td>
+                  <td className="py-4 pr-4 font-semibold text-[#ffe2a3]">{formatPoints(item.amount)}</td>
+                  <td className="py-4 pr-4">{formatDate(item.paymentDate)}</td>
+                  <td className="py-4 pr-4">
+                    <StatusBadge label={getStatusLabel(item.status)} tone={getStatusTone(item.status)} />
+                  </td>
+                  <td className="py-4 pr-4 text-xs text-[var(--admin-muted)]">
+                    {item.serviceType === 1 ? item.premiumId ?? "-" : item.bookingId ?? "-"}
+                  </td>
+                  <td className="py-4 text-right">
+                    <button
+                      type="button"
+                      onClick={() => void openDetail(item)}
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-white/12 bg-white/[0.03] text-[var(--admin-soft)] transition-colors hover:border-[#f0b35b]/50 hover:text-[#ffe2a3]"
+                      aria-label={`View service payment ${item.id}`}
+                    >
+                      <Eye className="h-3.5 w-3.5" />
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -449,133 +574,115 @@ export default function TransactionsPage() {
           </table>
         </div>
 
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-xs text-zinc-500">
-          <span>
-            Page {currentPage} of {totalPages}
-          </span>
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setPage((prev) => Math.max(1, prev - 1))}
-              disabled={currentPage === 1}
-              className="rounded-full border border-zinc-700 px-3 py-1 text-zinc-200 disabled:opacity-50"
-            >
-              Prev
-            </button>
-            {pageNumbers.map((number) => (
-              <button
-                key={number}
-                type="button"
-                onClick={() => setPage(number)}
-                className={`rounded-full border px-3 py-1 text-zinc-200 ${
-                  number === currentPage ? "border-emerald-400 text-emerald-200" : "border-zinc-700"
-                }`}
-              >
-                {number}
-              </button>
-            ))}
-            <button
-              type="button"
-              onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
-              disabled={currentPage === totalPages}
-              className="rounded-full border border-zinc-700 px-3 py-1 text-zinc-200 disabled:opacity-50"
-            >
-              Next
-            </button>
-          </div>
-        </div>
+        <Pagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          onPageChange={setPage}
+          summary={`Page ${currentPage} of ${totalPages}`}
+        />
       </section>
 
-      {modal.mode ? (
+      {detailModal.open ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-          <div className="w-full max-w-xl rounded-3xl border border-zinc-800 bg-[#121212] p-6">
+          <div className="admin-surface w-full max-w-4xl rounded-3xl p-6">
             <div className="mb-4 flex items-center justify-between">
-              <h4 className="text-lg font-extrabold">
-                {modal.mode === "create" ? "Create Transaction" : "Update Transaction"}
-              </h4>
+              <div>
+                <h4 className="text-lg font-extrabold text-white">Service Payment Detail</h4>
+                {detailModal.row ? (
+                  <p className="mt-1 text-sm text-[var(--admin-muted)]">
+                    {detailModal.row.serviceLabel} • {detailModal.row.id}
+                  </p>
+                ) : null}
+              </div>
               <button
                 type="button"
-                onClick={closeModal}
-                className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-zinc-700 text-zinc-300 hover:text-white"
+                onClick={closeDetail}
+                className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/12 bg-white/[0.03] text-[var(--admin-soft)] transition-colors hover:text-white"
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
-            {detailState.loading ? (
-              <p className="mb-3 text-xs text-zinc-500">Loading payment detail...</p>
+
+            {detailModal.loading ? (
+              <p className="text-sm text-[var(--admin-muted)]">Loading payment detail...</p>
             ) : null}
-            {detailState.error ? (
-              <p className="mb-3 text-xs text-rose-300">{detailState.error}</p>
+            {detailModal.error ? <p className="text-sm text-rose-300">{detailModal.error}</p> : null}
+
+            {!detailModal.loading && !detailModal.error && detailModal.detail ? (
+              <div className="space-y-5">
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                  <DetailItem label="Service Payment ID" value={detailModal.detail.servicePaymentId ?? "-"} />
+                  <DetailItem
+                    label="Amount"
+                    value={formatPoints(toNumber(detailModal.detail.amount))}
+                  />
+                  <DetailItem
+                    label="Service Type"
+                    value={getServiceTypeLabel(toNumber(detailModal.detail.serviceType))}
+                  />
+                  <DetailItem
+                    label="Payment Date"
+                    value={formatDate(detailModal.detail.paymentDate)}
+                  />
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div
+                    className={`admin-panel rounded-3xl border p-5 ${
+                      detailModal.detail.serviceType !== undefined
+                        ? getServiceTypeStyles(toNumber(detailModal.detail.serviceType)).panel
+                        : ""
+                    }`}
+                  >
+                    <div className="mb-4 flex items-center justify-between">
+                      <h5 className="text-base font-bold text-white">Payment Status</h5>
+                      <StatusBadge
+                        label={getStatusLabel(toNumber(detailModal.detail.status))}
+                        tone={getStatusTone(toNumber(detailModal.detail.status))}
+                      />
+                    </div>
+                    <p
+                      className={`text-sm font-semibold ${
+                        getServiceTypeStyles(toNumber(detailModal.detail.serviceType)).accent
+                      }`}
+                    >
+                      {toNumber(detailModal.detail.serviceType) === 1
+                        ? "Premium purchase"
+                        : "PT booking payment"}
+                    </p>
+                  </div>
+
+                  {premiumDetail ? (
+                    <div className="admin-panel rounded-3xl border border-violet-400/20 bg-violet-400/8 p-5">
+                      <h5 className="mb-4 text-base font-bold text-white">Premium Detail</h5>
+                      <div className="grid gap-3">
+                        <DetailItem label="Premium Payment ID" value={premiumDetail.premiumPaymentId ?? "-"} />
+                        <DetailItem label="Premium Type" value={premiumTypeLabel} />
+                        <DetailItem label="Start Date" value={formatDate(premiumDetail.startDate)} />
+                        <DetailItem label="End Date" value={formatDate(premiumDetail.endDate)} />
+                        <DetailItem label="Premium Status" value={String(premiumDetail.premiumStatus ?? "-")} />
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {bookingDetail ? (
+                    <div className="admin-panel rounded-3xl border border-cyan-400/20 bg-cyan-400/8 p-5 md:col-span-2">
+                      <h5 className="mb-4 text-base font-bold text-white">BookingPT Detail</h5>
+                      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                        <DetailItem label="Booking Payment ID" value={bookingDetail.bookingPaymentId ?? "-"} />
+                        <DetailItem label="Booking ID" value={bookingDetail.bookingId ?? "-"} />
+                        <DetailItem label="Account ID" value={bookingDetail.accountId ?? "-"} />
+                        <DetailItem label="Slot For Booking ID" value={bookingDetail.slotForBookingId ?? "-"} />
+                        <DetailItem label="Price" value={formatPoints(toNumber(bookingDetail.price))} />
+                        <DetailItem label="Total" value={formatPoints(toNumber(bookingDetail.total))} />
+                        <DetailItem label="Note" value={bookingDetail.note ?? "-"} />
+                        <DetailItem label="Booking Status" value={String(bookingDetail.bookingStatus ?? "-")} />
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              </div>
             ) : null}
-            <div className="grid gap-3">
-              <label className="grid gap-2 text-xs text-zinc-400">
-                Customer
-                <input
-                  value={modal.values.customer}
-                  onChange={(event) =>
-                    setModal((prev) => ({ ...prev, values: { ...prev.values, customer: event.target.value } }))
-                  }
-                  className="h-10 rounded-xl border border-zinc-700 bg-zinc-900 px-3 text-sm text-zinc-200"
-                />
-              </label>
-              <label className="grid gap-2 text-xs text-zinc-400">
-                Service
-                <input
-                  value={modal.values.packageName}
-                  onChange={(event) =>
-                    setModal((prev) => ({ ...prev, values: { ...prev.values, packageName: event.target.value } }))
-                  }
-                  className="h-10 rounded-xl border border-zinc-700 bg-zinc-900 px-3 text-sm text-zinc-200"
-                />
-              </label>
-              <label className="grid gap-2 text-xs text-zinc-400">
-                Amount
-                <input
-                  value={modal.values.amount}
-                  onChange={(event) =>
-                    setModal((prev) => ({ ...prev, values: { ...prev.values, amount: event.target.value } }))
-                  }
-                  className="h-10 rounded-xl border border-zinc-700 bg-zinc-900 px-3 text-sm text-zinc-200"
-                />
-              </label>
-              <label className="grid gap-2 text-xs text-zinc-400">
-                Paid At
-                <input
-                  value={modal.values.paidAt}
-                  onChange={(event) =>
-                    setModal((prev) => ({ ...prev, values: { ...prev.values, paidAt: event.target.value } }))
-                  }
-                  className="h-10 rounded-xl border border-zinc-700 bg-zinc-900 px-3 text-sm text-zinc-200"
-                />
-              </label>
-              <label className="grid gap-2 text-xs text-zinc-400">
-                Status
-                <input
-                  value={modal.values.status}
-                  onChange={(event) =>
-                    setModal((prev) => ({ ...prev, values: { ...prev.values, status: event.target.value } }))
-                  }
-                  className="h-10 rounded-xl border border-zinc-700 bg-zinc-900 px-3 text-sm text-zinc-200"
-                />
-              </label>
-            </div>
-            <div className="mt-5 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={closeModal}
-                className="inline-flex items-center gap-2 rounded-full border border-zinc-700 px-4 py-1.5 text-xs font-semibold text-zinc-200"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={saveModal}
-                className="inline-flex items-center gap-2 rounded-full border border-emerald-400 px-4 py-1.5 text-xs font-semibold text-emerald-200"
-              >
-                <Save className="h-3.5 w-3.5" />
-                Save
-              </button>
-            </div>
           </div>
         </div>
       ) : null}

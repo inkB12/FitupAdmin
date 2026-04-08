@@ -126,14 +126,10 @@ export const api = {
     safePatch<unknown>(`/api/Booking/${bookingId}/force-cancel`),
 
   getConversionRates: () => safeGet<unknown>("/api/conversion-rates"),
-  createConversionRate: (payload: unknown) =>
-    safePost<unknown>("/api/conversion-rates", payload),
   getConversionRateById: (id: string) =>
     safeGet<unknown>(`/api/conversion-rates/${id}`),
   updateConversionRate: (id: string, payload: unknown) =>
     safePut<unknown>(`/api/conversion-rates/${id}`, payload),
-  deleteConversionRate: (id: string) =>
-    safeDelete<unknown>(`/api/conversion-rates/${id}`),
 
   getDashboard: () => safeGet<unknown>("/api/DashBoard"),
 

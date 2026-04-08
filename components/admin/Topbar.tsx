@@ -14,13 +14,11 @@ const titleMap: Record<string, string> = {
   "/dashboard": "Dashboard",
   "/users": "Users",
   "/trainers": "Trainers",
-  "/packages": "Packages",
-  "/blogs": "Blogs",
-  "/transactions": "Transactions",
+  "/packages": "Premium Management",
+  "/transactions": "Service Payment",
+  "/payment-history": "Payment History",
   "/bookings": "Bookings",
   "/conversion-rates": "Conversion Rates",
-  "/workouts": "Workouts",
-  "/settings": "Settings",
 };
 
 export default function Topbar({ onMenuClick }: TopbarProps) {
@@ -29,39 +27,39 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
   const { query, setQuery } = useAdminSearch();
 
   return (
-    <header className="sticky top-0 z-30 border-b border-zinc-800 bg-[#1f1f1f]/95 backdrop-blur">
-      <div className="flex h-16 items-center justify-between gap-4 px-4 md:px-8">
+    <header className="sticky top-0 z-30 border-b border-white/8 bg-[#09111c]/84 backdrop-blur-xl">
+      <div className="flex h-18 items-center justify-between gap-4 px-4 py-3 md:px-8">
         <div className="flex items-center gap-3">
           <button
             type="button"
             onClick={onMenuClick}
-            className="rounded-full border border-zinc-700 p-2 text-zinc-300 md:hidden"
+            className="rounded-full border border-white/12 bg-white/[0.04] p-2 text-[var(--admin-soft)] md:hidden"
             aria-label="Open menu"
           >
             <Menu className="h-4 w-4" />
           </button>
 
           <div>
-            <p className="text-xs uppercase tracking-[0.1em] text-zinc-500">FITUP Control Room</p>
+            <p className="text-xs uppercase tracking-[0.14em] text-[var(--admin-muted)]">FITUP Control Room</p>
             <h1 className="text-lg font-extrabold text-white">{activeTitle}</h1>
           </div>
         </div>
 
         <div className="hidden items-center gap-3 md:flex">
-          <div className="flex h-10 min-w-[280px] items-center gap-2 rounded-full border border-zinc-700 bg-[#121212] px-4 text-zinc-400">
-            <Search className="h-4 w-4" />
+          <div className="flex h-11 min-w-[320px] items-center gap-2 rounded-full border border-white/12 bg-[#0d1724]/92 px-4 text-[var(--admin-soft)] shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
+            <Search className="h-4 w-4 text-[var(--admin-accent)]" />
             <input
               type="text"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search users, packages, blogs..."
-              className="w-full bg-transparent text-sm text-zinc-200 outline-none placeholder:text-zinc-500"
+              placeholder="Search users, packages, transactions..."
+              className="w-full bg-transparent text-sm text-white outline-none placeholder:text-[color:rgba(142,163,184,0.72)]"
             />
             {query ? (
               <button
                 type="button"
                 onClick={() => setQuery("")}
-                className="rounded-full p-1 text-zinc-500 hover:text-zinc-200"
+                className="rounded-full p-1 text-[var(--admin-muted)] hover:text-white"
                 aria-label="Clear search"
               >
                 <X className="h-3.5 w-3.5" />
@@ -70,7 +68,7 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
           </div>
 
           <Button variant="outline" size="icon" aria-label="Notifications">
-            <Bell className="h-4 w-4" />
+            <Bell className="h-4 w-4 text-[var(--admin-accent-soft)]" />
           </Button>
         </div>
       </div>

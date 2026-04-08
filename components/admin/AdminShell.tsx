@@ -24,12 +24,13 @@ export default function AdminShell({ children }: AdminShellProps) {
 
   return (
     <AdminSearchProvider value={{ query: searchQuery, debouncedQuery, setQuery: setSearchQuery }}>
-      <div className="min-h-screen bg-[#1f1f1f] text-white">
+      <div className="admin-shell relative overflow-x-hidden text-white">
+        <div className="pointer-events-none fixed inset-x-0 top-0 h-72 bg-[radial-gradient(circle_at_top,rgba(240,179,91,0.14),transparent_55%)]" />
         <Sidebar mobileOpen={mobileOpen} onClose={() => setMobileOpen(false)} />
 
-        <div className="md:pl-72">
+        <div className="relative md:pl-72">
           <Topbar onMenuClick={() => setMobileOpen(true)} />
-          <main className="px-4 py-6 md:px-8 md:py-8">{children}</main>
+          <main className="relative px-4 py-6 md:px-8 md:py-8">{children}</main>
         </div>
       </div>
     </AdminSearchProvider>

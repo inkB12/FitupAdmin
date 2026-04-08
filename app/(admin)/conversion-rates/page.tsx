@@ -1,46 +1,44 @@
 "use client";
 
-import { Pencil, Plus, Save, Search, Trash2, X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { ArrowDownLeft, ArrowUpRight, Pencil, Save, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { useAdminSearch } from "@/components/admin/AdminSearchContext";
+import PageHero from "@/components/admin/PageHero";
+import StatusBadge from "@/components/admin/StatusBadge";
 import { clientApi } from "@/lib/client-api";
 
-type ConversionRow = Record<string, unknown>;
-
-type TableSpec = {
-  columns: string[];
-  rows: ConversionRow[];
+type ConversionRateApiRow = {
+  id?: string;
+  type?: number | string | null;
+  rate?: number | string | null;
+  status?: number | string | null;
 };
 
-type InlineTableProps = {
-  title: string;
-  table: TableSpec | null;
-  globalQuery: string;
-  onCreate: (payload: Record<string, unknown>) => Promise<void>;
-  onUpdate: (id: string, payload: Record<string, unknown>) => Promise<void>;
-  onDelete: (id: string) => Promise<void>;
+type ConversionRateRow = {
+  id: string;
+  type: number;
+  rate: number;
+  status: number;
 };
 
-type ModalState = {
-  mode: "create" | "edit" | null;
-  rowId: string | null;
-  values: Record<string, string>;
+type EditState = {
+  open: boolean;
+  row: ConversionRateRow | null;
+  ratePercent: string;
+  status: string;
+  error: string | null;
+  saving: boolean;
 };
 
-const PAGE_SIZE = 6;
-
-function shouldHideColumn(column: string) {
-  return column.toLowerCase().includes("id");
-}
-
-function findArray(value: unknown, depth = 0): ConversionRow[] | null {
+function findArray(value: unknown, depth = 0): ConversionRateApiRow[] | null {
   if (Array.isArray(value)) {
-    return value as ConversionRow[];
+    return value as ConversionRateApiRow[];
   }
+
   if (!value || typeof value !== "object" || depth > 2) {
     return null;
   }
+
   const record = value as Record<string, unknown>;
   for (const entry of Object.values(record)) {
     const found = findArray(entry, depth + 1);
@@ -48,298 +46,364 @@ function findArray(value: unknown, depth = 0): ConversionRow[] | null {
       return found;
     }
   }
+
   return null;
 }
 
-function buildTable(data: unknown): TableSpec | null {
-  const rows = findArray(data);
-  if (!rows || rows.length === 0) {
-    return null;
+function toNumber(value: number | string | null | undefined) {
+  if (typeof value === "number") {
+    return value;
   }
-  const sample = rows.find((row) => row && typeof row === "object") ?? rows[0];
-  if (!sample || typeof sample !== "object") {
-    return null;
+
+  if (typeof value === "string") {
+    const parsed = Number.parseFloat(value);
+    return Number.isNaN(parsed) ? 0 : parsed;
   }
-  const columns = Object.keys(sample as Record<string, unknown>)
-    .filter((column) => !shouldHideColumn(column))
-    .slice(0, 6);
-  return { columns, rows: rows as ConversionRow[] };
+
+  return 0;
 }
 
-function renderCell(value: unknown) {
-  if (value === null || value === undefined) {
-    return "-";
-  }
-  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
-    return String(value);
-  }
-  return JSON.stringify(value);
+function normalizeRows(payload: unknown): ConversionRateRow[] {
+  const rows = findArray(payload) ?? [];
+
+  return rows
+    .map((row) => ({
+      id: typeof row.id === "string" ? row.id : "",
+      type: toNumber(row.type),
+      rate: toNumber(row.rate),
+      status: toNumber(row.status),
+    }))
+    .filter((row) => row.id);
 }
 
-function getRowId(row: ConversionRow) {
-  if (typeof row.id === "string") {
-    return row.id;
-  }
-  if (typeof row._id === "string") {
-    return row._id;
-  }
-  return "";
+function formatPercent(rate: number) {
+  const percent = rate * 100;
+  const value = Number.isInteger(percent) ? String(percent) : percent.toFixed(2).replace(/\.?0+$/, "");
+  return `${value}%`;
 }
 
-function InlineEditableTable({ title, table, onCreate, onUpdate, onDelete, globalQuery }: InlineTableProps) {
-  const [modal, setModal] = useState<ModalState>({ mode: null, rowId: null, values: {} });
-  const [query, setQuery] = useState("");
-  const [page, setPage] = useState(1);
+function formatPercentInput(rate: number) {
+  const percent = rate * 100;
+  return Number.isInteger(percent) ? String(percent) : percent.toFixed(2).replace(/\.?0+$/, "");
+}
 
-  const columns = table?.columns ?? [];
-  const combinedQuery = useMemo(
-    () => [query, globalQuery].filter(Boolean).join(" ").trim(),
-    [query, globalQuery],
-  );
-
-  const filteredRows = useMemo(() => {
-    const source = table?.rows ?? [];
-    const term = combinedQuery.toLowerCase();
-    if (!term) {
-      return source;
-    }
-    return source.filter((row) => JSON.stringify(row).toLowerCase().includes(term));
-  }, [table, combinedQuery]);
-
-  const totalPages = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
-  const currentPage = Math.min(page, totalPages);
-  const pageRows = filteredRows.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
-
-  const openCreate = () => {
-    const values: Record<string, string> = {};
-    columns.forEach((column) => {
-      values[column] = "";
-    });
-    setModal({ mode: "create", rowId: null, values });
-  };
-
-  const openEdit = (row: ConversionRow) => {
-    const values: Record<string, string> = {};
-    columns.forEach((column) => {
-      values[column] = row[column] !== undefined && row[column] !== null ? String(row[column]) : "";
-    });
-    setModal({ mode: "edit", rowId: getRowId(row) || null, values });
-  };
-
-  const closeModal = () => {
-    setModal({ mode: null, rowId: null, values: {} });
-  };
-
-  const saveModal = async () => {
-    const payload: Record<string, unknown> = {};
-    columns.forEach((column) => {
-      payload[column] = modal.values[column] ?? "";
-    });
-    if (modal.mode === "create") {
-      await onCreate(payload);
-    }
-    if (modal.mode === "edit" && modal.rowId) {
-      await onUpdate(modal.rowId, payload);
-    }
-    closeModal();
-  };
-
-  if (!table) {
+function parsePercentInput(value: string) {
+  const parsed = Number.parseFloat(value.replace("%", "").trim());
+  if (Number.isNaN(parsed) || parsed < 0 || parsed > 100) {
     return null;
   }
+
+  return parsed / 100;
+}
+
+function getTypeLabel(type: number) {
+  if (type === 1) {
+    return "Topup";
+  }
+
+  if (type === 2) {
+    return "Withdraw";
+  }
+
+  return `Type ${type}`;
+}
+
+function getTypeDescription(type: number) {
+  if (type === 1) {
+    return "Conversion rate for money topup flow.";
+  }
+
+  if (type === 2) {
+    return "Conversion rate for money withdraw flow.";
+  }
+
+  return "Conversion rate configuration.";
+}
+
+function getStatusLabel(status: number) {
+  return status === 0 ? "On" : "Off";
+}
+
+function getStatusTone(status: number) {
+  return status === 0 ? "success" : "warning";
+}
+
+function getRowByType(rows: ConversionRateRow[], type: number) {
+  return rows.find((row) => row.type === type) ?? null;
+}
+
+export default function ConversionRatesPage() {
+  const [rows, setRows] = useState<ConversionRateRow[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [edit, setEdit] = useState<EditState>({
+    open: false,
+    row: null,
+    ratePercent: "",
+    status: "0",
+    error: null,
+    saving: false,
+  });
+
+  const loadRates = useCallback(() => {
+    clientApi.get("/api/conversion-rates").then((result) => {
+      setError(result.error);
+      setRows(normalizeRows(result.data));
+    });
+  }, []);
+
+  useEffect(() => {
+    loadRates();
+  }, [loadRates]);
+
+  const topupRow = useMemo(() => getRowByType(rows, 1), [rows]);
+  const withdrawRow = useMemo(() => getRowByType(rows, 2), [rows]);
+  const onCount = useMemo(() => rows.filter((row) => row.status === 0).length, [rows]);
+
+  const openEdit = (row: ConversionRateRow) => {
+    setEdit({
+      open: true,
+      row,
+      ratePercent: formatPercentInput(row.rate),
+      status: String(row.status),
+      error: null,
+      saving: false,
+    });
+  };
+
+  const closeEdit = () => {
+    setEdit({
+      open: false,
+      row: null,
+      ratePercent: "",
+      status: "0",
+      error: null,
+      saving: false,
+    });
+  };
+
+  const saveEdit = async () => {
+    if (!edit.row) {
+      return;
+    }
+
+    const rate = parsePercentInput(edit.ratePercent);
+    const status = Number.parseInt(edit.status, 10);
+
+    if (rate === null) {
+      setEdit((prev) => ({
+        ...prev,
+        error: "Rate must be between 0 and 100. Example: 90 means 90%.",
+      }));
+      return;
+    }
+
+    if (![0, 1].includes(status)) {
+      setEdit((prev) => ({
+        ...prev,
+        error: "Status only accepts 0 (On) or 1 (Off).",
+      }));
+      return;
+    }
+
+    setEdit((prev) => ({ ...prev, saving: true, error: null }));
+
+    const result = await clientApi.put(`/api/conversion-rates/${edit.row.id}`, {
+      type: edit.row.type,
+      rate,
+      status,
+    });
+
+    if (result.error) {
+      setEdit((prev) => ({ ...prev, saving: false, error: result.error }));
+      return;
+    }
+
+    closeEdit();
+    loadRates();
+  };
+
+  const cards = [
+    {
+      row: topupRow,
+      title: "Topup",
+      icon: ArrowUpRight,
+      iconTone: "text-emerald-200 bg-emerald-400/12 border-emerald-400/20",
+      accent: "from-emerald-400/14 to-sky-400/8",
+    },
+    {
+      row: withdrawRow,
+      title: "Withdraw",
+      icon: ArrowDownLeft,
+      iconTone: "text-amber-100 bg-amber-400/12 border-amber-400/20",
+      accent: "from-amber-400/14 to-rose-400/8",
+    },
+  ];
 
   return (
-    <section className="rounded-3xl border border-zinc-800 bg-[#121212] p-6 md:p-7">
-      <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <h3 className="text-lg font-extrabold">{title}</h3>
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-2 rounded-2xl border border-zinc-800 bg-zinc-900/50 px-4 py-2 text-sm text-zinc-300">
-            <Search className="h-4 w-4 text-zinc-500" />
-            <input
-              value={query}
-              onChange={(event) => {
-                setQuery(event.target.value);
-                setPage(1);
-              }}
-              placeholder="Search records"
-              className="w-full bg-transparent text-sm outline-none placeholder:text-zinc-500"
-            />
-          </div>
-          <button
-            type="button"
-            onClick={openCreate}
-            className="inline-flex items-center gap-2 rounded-full border border-zinc-700 px-4 py-1.5 text-xs font-semibold text-zinc-200 hover:border-emerald-400 hover:text-emerald-300"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            Create
-          </button>
-        </div>
-      </div>
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[900px] text-left text-sm">
-          <thead>
-            <tr className="border-b border-zinc-800 text-xs uppercase tracking-[0.08em] text-zinc-500">
-              {columns.map((column) => (
-                <th key={column} className="pb-3">
-                  {column}
-                </th>
-              ))}
-              <th className="pb-3 text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {pageRows.map((row, index) => {
-              const rowId = getRowId(row) || String(index);
-              return (
-                <tr key={rowId} className="border-b border-zinc-800/60 text-zinc-200">
-                  {columns.map((column) => (
-                    <td key={column} className="py-3 text-xs">
-                      {renderCell(row[column])}
-                    </td>
-                  ))}
-                  <td className="py-3 text-right">
-                    <div className="inline-flex items-center gap-2">
+    <div className="space-y-6">
+      <PageHero
+        eyebrow="Payment Rules"
+        title="Conversion Rate Controls"
+        description="This page now focuses on the only two conversion rules in the system: Topup and Withdraw. Each card shows its live rate and switch state clearly."
+        stats={[
+          { label: "Configs", value: "2", tone: "info" },
+          { label: "Currently on", value: String(onCount), tone: "success" },
+          { label: "Currently off", value: String(rows.filter((row) => row.status === 1).length), tone: "warning" },
+        ]}
+      />
+
+      {error ? (
+        <section className="admin-surface rounded-3xl p-6">
+          <p className="text-sm font-semibold text-white">Unable to load conversion rates.</p>
+          <p className="mt-2 text-sm text-rose-300">{error}</p>
+        </section>
+      ) : null}
+
+      <section className="grid gap-5 xl:grid-cols-2">
+        {cards.map((card) => {
+          const Icon = card.icon;
+          const row = card.row;
+
+          return (
+            <article
+              key={card.title}
+              className={`admin-surface relative overflow-hidden rounded-3xl p-6`}
+            >
+              <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${card.accent}`} />
+              <div className="relative">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className={`rounded-2xl border p-3 ${card.iconTone}`}>
+                      <Icon className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <p className="admin-kicker">{card.title}</p>
+                      <h3 className="mt-1 text-2xl font-black text-white">{card.title}</h3>
+                      <p className="mt-2 text-sm text-[var(--admin-muted)]">
+                        {row ? getTypeDescription(row.type) : "Configuration has not been returned by the API yet."}
+                      </p>
+                    </div>
+                  </div>
+
+                  {row ? <StatusBadge label={getStatusLabel(row.status)} tone={getStatusTone(row.status)} /> : null}
+                </div>
+
+                {row ? (
+                  <>
+                    <div className="mt-6 grid gap-4 sm:grid-cols-2">
+                      <div className="admin-panel rounded-2xl p-4">
+                        <p className="text-xs uppercase tracking-[0.12em] text-[var(--admin-muted)]">Rate</p>
+                        <p className="mt-2 text-3xl font-black text-white">{formatPercent(row.rate)}</p>
+                      </div>
+
+                      <div className="admin-panel rounded-2xl p-4">
+                        <p className="text-xs uppercase tracking-[0.12em] text-[var(--admin-muted)]">Status</p>
+                        <p className="mt-2 text-3xl font-black text-white">{getStatusLabel(row.status)}</p>
+                      </div>
+                    </div>
+
+                    <div className="mt-5 flex justify-end rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3">
                       <button
                         type="button"
                         onClick={() => openEdit(row)}
-                        className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-900/60 text-zinc-300 hover:text-emerald-200"
+                        className="inline-flex items-center gap-2 rounded-full border border-[#f0b35b]/35 bg-[#f0b35b]/10 px-4 py-2 text-xs font-semibold text-[#ffe2a3] transition-colors hover:border-[#f0b35b]/70"
                       >
                         <Pencil className="h-3.5 w-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const id = getRowId(row);
-                          if (id) {
-                            onDelete(id);
-                          }
-                        }}
-                        className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-900/60 text-zinc-300 hover:text-rose-300"
-                        disabled={!getRowId(row)}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
+                        Edit {getTypeLabel(row.type)}
                       </button>
                     </div>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-      <div className="mt-4 flex items-center justify-between text-xs text-zinc-500">
-        <span>Page {currentPage} of {totalPages}</span>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setPage((prev) => Math.max(1, prev - 1))}
-            disabled={currentPage === 1}
-            className="rounded-full border border-zinc-700 px-3 py-1 text-zinc-200 disabled:opacity-50"
-          >
-            Prev
-          </button>
-          <button
-            type="button"
-            onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
-            disabled={currentPage === totalPages}
-            className="rounded-full border border-zinc-700 px-3 py-1 text-zinc-200 disabled:opacity-50"
-          >
-            Next
-          </button>
-        </div>
-      </div>
+                  </>
+                ) : (
+                  <div className="mt-6 admin-panel rounded-2xl p-5">
+                    <p className="text-sm font-semibold text-white">{card.title} config is missing.</p>
+                    <p className="mt-2 text-sm text-[var(--admin-muted)]">
+                      Expected API row with type {card.title === "Topup" ? "1" : "2"}.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </article>
+          );
+        })}
+      </section>
 
-      {modal.mode ? (
+      {edit.open && edit.row ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-          <div className="w-full max-w-xl rounded-3xl border border-zinc-800 bg-[#121212] p-6">
+          <div className="admin-surface w-full max-w-xl rounded-3xl p-6">
             <div className="mb-4 flex items-center justify-between">
-              <h4 className="text-lg font-extrabold">
-                {modal.mode === "create" ? "Create Conversion Rate" : "Update Conversion Rate"}
+              <h4 className="text-lg font-extrabold text-white">
+                Update {getTypeLabel(edit.row.type)} Conversion Rate
               </h4>
               <button
                 type="button"
-                onClick={closeModal}
-                className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-zinc-700 text-zinc-300 hover:text-white"
+                onClick={closeEdit}
+                className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/12 bg-white/[0.03] text-[var(--admin-soft)] transition-colors hover:text-white"
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
+
             <div className="grid gap-3">
-              {columns.map((column) => (
-                <label key={column} className="grid gap-2 text-xs text-zinc-400">
-                  {column}
-                  <input
-                    value={modal.values[column] ?? ""}
-                    onChange={(event) =>
-                      setModal((prev) => ({
-                        ...prev,
-                        values: { ...prev.values, [column]: event.target.value },
-                      }))
-                    }
-                    className="h-10 rounded-xl border border-zinc-700 bg-zinc-900 px-3 text-sm text-zinc-200"
-                  />
-                </label>
-              ))}
+              <label className="grid gap-2 text-xs font-semibold text-[var(--admin-muted)]">
+                <span className="uppercase tracking-[0.12em]">Type</span>
+                <input
+                  value={`${getTypeLabel(edit.row.type)} (${edit.row.type})`}
+                  disabled
+                  className="h-11 rounded-2xl border border-white/12 bg-[#09111c] px-4 text-sm text-[var(--admin-muted)] outline-none"
+                />
+              </label>
+
+              <label className="grid gap-2 text-xs font-semibold text-[var(--admin-muted)]">
+                <span className="uppercase tracking-[0.12em]">Rate (%)</span>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.01"
+                  value={edit.ratePercent}
+                  onChange={(event) =>
+                    setEdit((prev) => ({ ...prev, ratePercent: event.target.value }))
+                  }
+                  className="h-11 rounded-2xl border border-white/12 bg-[#0d1724]/90 px-4 text-sm text-white outline-none transition-colors focus:border-[#f0b35b]/80"
+                />
+              </label>
+
+              <label className="grid gap-2 text-xs font-semibold text-[var(--admin-muted)]">
+                <span className="uppercase tracking-[0.12em]">Status</span>
+                <select
+                  value={edit.status}
+                  onChange={(event) => setEdit((prev) => ({ ...prev, status: event.target.value }))}
+                  className="h-11 rounded-2xl border border-white/12 bg-[#0d1724]/90 px-4 text-sm text-white outline-none transition-colors focus:border-[#f0b35b]/80"
+                >
+                  <option value="0">On</option>
+                  <option value="1">Off</option>
+                </select>
+              </label>
             </div>
+
+            {edit.error ? <p className="mt-3 text-sm text-rose-300">{edit.error}</p> : null}
+
             <div className="mt-5 flex justify-end gap-2">
               <button
                 type="button"
-                onClick={closeModal}
-                className="inline-flex items-center gap-2 rounded-full border border-zinc-700 px-4 py-1.5 text-xs font-semibold text-zinc-200"
+                onClick={closeEdit}
+                className="rounded-full border border-white/12 bg-white/[0.03] px-4 py-2 text-xs font-semibold text-white"
               >
                 Cancel
               </button>
               <button
                 type="button"
-                onClick={saveModal}
-                className="inline-flex items-center gap-2 rounded-full border border-emerald-400 px-4 py-1.5 text-xs font-semibold text-emerald-200"
+                onClick={() => void saveEdit()}
+                disabled={edit.saving}
+                className="inline-flex items-center gap-2 rounded-full border border-[#f0b35b]/35 bg-[#f0b35b]/10 px-4 py-2 text-xs font-semibold text-[#ffe2a3] disabled:opacity-60"
               >
                 <Save className="h-3.5 w-3.5" />
-                Save
+                {edit.saving ? "Saving..." : "Save"}
               </button>
             </div>
           </div>
         </div>
       ) : null}
-    </section>
-  );
-}
-
-export default function ConversionRatesPage() {
-  const [rawRates, setRawRates] = useState<unknown>(null);
-  const { debouncedQuery: globalQuery } = useAdminSearch();
-
-  useEffect(() => {
-    let active = true;
-    clientApi.get("/api/conversion-rates").then((result) => {
-      if (active) {
-        setRawRates(result.data ?? null);
-      }
-    });
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  const table = useMemo(() => buildTable(rawRates), [rawRates]);
-
-  return (
-    <div className="space-y-6">
-      <section>
-        <h2 className="text-2xl font-black">Conversion Rates</h2>
-        <p className="mt-1 text-sm text-zinc-400">Manage conversion rate records for reporting.</p>
-      </section>
-
-      <InlineEditableTable
-        title="Conversion Rates"
-        table={table}
-        globalQuery={globalQuery}
-        onCreate={(payload) => clientApi.post("/api/conversion-rates", payload)}
-        onUpdate={(id, payload) => clientApi.put(`/api/conversion-rates/${id}`, payload)}
-        onDelete={(id) => clientApi.delete(`/api/conversion-rates/${id}`)}
-      />
     </div>
   );
 }
-
-

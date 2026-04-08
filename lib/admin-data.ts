@@ -6,12 +6,10 @@
     | "users"
     | "trainers"
     | "packages"
-    | "blogs"
     | "transactions"
+    | "payment-history"
     | "bookings"
-    | "conversion-rates"
-    | "workouts"
-    | "settings";
+    | "conversion-rates";
 };
 
 export type KpiItem = {
@@ -40,14 +38,6 @@ export type TrainerRow = {
   status: "available" | "busy";
 };
 
-export type BlogRow = {
-  id: string;
-  title: string;
-  category: string;
-  updatedAt: string;
-  status: "published" | "draft";
-};
-
 export type TransactionRow = {
   id: string;
   customer: string;
@@ -61,13 +51,11 @@ export const SIDEBAR_ITEMS: SidebarItem[] = [
   { label: "Dashboard", href: "/dashboard", key: "dashboard" },
   { label: "Users", href: "/users", key: "users" },
   { label: "Trainers", href: "/trainers", key: "trainers" },
-  { label: "Packages", href: "/packages", key: "packages" },
-  { label: "Blogs", href: "/blogs", key: "blogs" },
-  { label: "Transactions", href: "/transactions", key: "transactions" },
+  { label: "Premium Management", href: "/packages", key: "packages" },
+  { label: "Service Payment", href: "/transactions", key: "transactions" },
+  { label: "Payment History", href: "/payment-history", key: "payment-history" },
   { label: "Bookings", href: "/bookings", key: "bookings" },
   { label: "Conversion Rates", href: "/conversion-rates", key: "conversion-rates" },
-  { label: "Workouts", href: "/workouts", key: "workouts" },
-  { label: "Settings", href: "/settings", key: "settings" },
 ];
 
 export const DASHBOARD_KPIS: KpiItem[] = [
@@ -168,30 +156,6 @@ export const TRAINERS: TrainerRow[] = [
     rating: 4.7,
     sessions: 162,
     status: "available",
-  },
-];
-
-export const BLOGS: BlogRow[] = [
-  {
-    id: "B-810",
-    title: "AI Personalized Training Plan: Why It Works",
-    category: "AI Coaching",
-    updatedAt: "2026-03-11",
-    status: "published",
-  },
-  {
-    id: "B-811",
-    title: "30-Minute Home Workout Template",
-    category: "Training",
-    updatedAt: "2026-03-10",
-    status: "published",
-  },
-  {
-    id: "B-812",
-    title: "Sleep and Muscle Growth Basics",
-    category: "Lifestyle",
-    updatedAt: "2026-03-10",
-    status: "draft",
   },
 ];
 
