@@ -66,6 +66,14 @@ function formatDate(value: string | null | undefined) {
   }).format(parsed);
 }
 
+function formatPhone(value: string | null | undefined) {
+  if (!value || value.trim().toLowerCase() === "string") {
+    return "Sđt: -";
+  }
+
+  return `Sđt: ${value}`;
+}
+
 function normalizeRole(role: string | null | undefined) {
   if (!role) {
     return "User";
@@ -312,7 +320,6 @@ export default function UsersPage() {
                         </div>
                         <div>
                           <p className="font-semibold text-white">{email}</p>
-                          <p className="text-xs text-[var(--admin-muted)]">{user.id ?? "-"}</p>
                         </div>
                       </div>
                     </td>
@@ -322,7 +329,7 @@ export default function UsersPage() {
                           <Mail className="h-3.5 w-3.5 text-[#f0b35b]" />
                           {email}
                         </span>
-                        <span>{user.phone ?? "-"}</span>
+                        <span>{formatPhone(user.phone)}</span>
                       </div>
                     </td>
                     <td className="py-4 pr-4">

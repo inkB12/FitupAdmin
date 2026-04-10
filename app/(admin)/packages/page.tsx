@@ -105,11 +105,9 @@ function extractPremiumTypes(payload: unknown): PremiumCard[] {
 }
 
 function formatCurrency(value: number) {
-  return new Intl.NumberFormat("vi-VN", {
-    style: "currency",
-    currency: "VND",
+  return `${new Intl.NumberFormat("vi-VN", {
     maximumFractionDigits: 0,
-  }).format(value);
+  }).format(value)} P`;
 }
 
 function getStatusTone(status: number) {
@@ -372,45 +370,56 @@ export default function PackagesPage() {
         ) : (
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {pageRows.map((item) => (
-              <article key={item.id} className="admin-panel rounded-3xl p-6">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-xs uppercase tracking-[0.12em] text-[var(--admin-muted)]">Premium</p>
-                    <h3 className="mt-2 text-2xl font-black text-white">{item.describe}</h3>
-                  </div>
+              <article
+                key={item.id}
+                className="admin-panel flex min-h-[320px] flex-col rounded-3xl p-6 text-center"
+              >
+                <div className="flex items-start justify-end">
                   <StatusBadge label={getStatusLabel(item.status)} tone={getStatusTone(item.status)} />
                 </div>
 
-                <p className="mt-4 text-lg font-semibold text-[#ffe2a3]">{formatCurrency(item.price)}</p>
-                <p className="mt-3 text-sm leading-6 text-[var(--admin-muted)]">
-                  Duration: {getDurationLabel(item.duration)}
-                </p>
+                <div className="mt-3 flex flex-1 flex-col items-center justify-center">
+                  <p className="text-xs uppercase tracking-[0.18em] text-[var(--admin-muted)]">Premium</p>
+                  <h3 className="mt-3 max-w-[16rem] text-2xl font-black text-white">{item.describe}</h3>
 
-                <div className="mt-5 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                  <p className="text-xs uppercase tracking-[0.12em] text-[var(--admin-muted)]">Duration</p>
-                  <p className="mt-2 text-2xl font-black text-white">{item.duration}</p>
-                  <p className="mt-1 text-sm text-[var(--admin-muted)]">days</p>
+                  <div className="mt-5 w-full rounded-[28px] border border-[#f0b35b]/20 bg-[linear-gradient(180deg,rgba(240,179,91,0.14),rgba(255,255,255,0.02))] px-5 py-6">
+                    <p className="text-xs uppercase tracking-[0.14em] text-[#ffd99b]">Price</p>
+                    <p className="mt-3 text-3xl font-black tracking-tight text-[#ffe2a3]">
+                      {formatCurrency(item.price)}
+                    </p>
+                    <p className="mt-2 text-sm text-[var(--admin-soft)]">{getDurationLabel(item.duration)}</p>
+                  </div>
+
+                  <div className="mt-5 grid w-full grid-cols-2 gap-3">
+                    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                      <p className="text-xs uppercase tracking-[0.12em] text-[var(--admin-muted)]">Duration</p>
+                      <p className="mt-2 text-2xl font-black text-white">{item.duration}</p>
+                      <p className="mt-1 text-sm text-[var(--admin-muted)]">days</p>
+                    </div>
+                    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                      <p className="text-xs uppercase tracking-[0.12em] text-[var(--admin-muted)]">Plan</p>
+                      <p className="mt-2 text-xl font-black text-white">Premium</p>
+                      <p className="mt-1 text-sm text-[var(--admin-muted)]">Membership</p>
+                    </div>
+                  </div>
                 </div>
 
-                <div className="mt-5 flex items-center justify-between gap-3 text-xs">
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => openEdit(item)}
-                      className="rounded-full border border-[#f0b35b]/35 bg-[#f0b35b]/10 px-4 py-2 font-semibold text-[#ffe2a3] transition-colors hover:border-[#f0b35b]/70"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void deletePremiumType(item.id)}
-                      className="inline-flex items-center gap-2 rounded-full border border-rose-400/30 bg-rose-400/10 px-4 py-2 font-semibold text-rose-200 transition-colors hover:border-rose-400/60"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                      Delete
-                    </button>
-                  </div>
-                  <span className="text-[var(--admin-muted)]">ID: {item.id}</span>
+                <div className="mt-6 flex items-center justify-center gap-2 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => openEdit(item)}
+                    className="rounded-full border border-[#f0b35b]/35 bg-[#f0b35b]/10 px-4 py-2 font-semibold text-[#ffe2a3] transition-colors hover:border-[#f0b35b]/70"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void deletePremiumType(item.id)}
+                    className="inline-flex items-center gap-2 rounded-full border border-rose-400/30 bg-rose-400/10 px-4 py-2 font-semibold text-rose-200 transition-colors hover:border-rose-400/60"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    Delete
+                  </button>
                 </div>
               </article>
             ))}

@@ -1,12 +1,11 @@
 "use client";
 
 import Image from "next/image";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
 import { Button } from "@/components/ui/button";
-import { setAuthToken } from "@/lib/client-api";
+import { clearAuthSession, getAuthRoleFromToken, setAuthRole, setAuthToken } from "@/lib/client-api";
 
 function findToken(value: unknown): string | null {
   if (!value || typeof value !== "object") {
@@ -76,14 +75,22 @@ export default function LoginPage() {
         }
       }
 
-      if (token) {
-        setAuthToken(token);
+      const role = token ? getAuthRoleFromToken(token) : null;
+
+      if (!role || role.toLowerCase() !== "admin") {
+        clearAuthSession();
+        throw new Error("Only admin accounts can access this portal.");
       }
 
+      if (!token) {
+        throw new Error("Login succeeded but no access token was returned.");
+      }
+
+      setAuthToken(token);
+      setAuthRole(role);
       router.push("/dashboard");
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Unknown error";
-      setError(`Login failed. ${message}`);
+    } catch {
+      setError("Login failed");
     } finally {
       setIsLoading(false);
     }
@@ -102,10 +109,7 @@ export default function LoginPage() {
           </div>
         </div>
 
-        <h1 className="text-2xl font-black">Welcome Back</h1>
-        <p className="mt-2 text-sm text-zinc-400">Sign in to manage users, packages, and platform content.</p>
-
-        <form className="mt-7 space-y-4" onSubmit={handleSubmit}>
+        <form className="space-y-4" onSubmit={handleSubmit}>
           <label className="block">
             <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.1em] text-zinc-400">Email</span>
             <input
@@ -137,13 +141,6 @@ export default function LoginPage() {
           </Button>
         </form>
 
-        <div className="mt-6 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-4">
-          <p className="text-xs uppercase tracking-[0.1em] text-zinc-500">Demo Access</p>
-          <p className="mt-1 text-sm text-zinc-300">This template uses mocked data only. Hook your auth provider next.</p>
-          <Link href="/dashboard" className="mt-3 inline-flex text-sm font-semibold text-[#d68c45] hover:brightness-110">
-            Continue to dashboard
-          </Link>
-        </div>
       </section>
     </main>
   );

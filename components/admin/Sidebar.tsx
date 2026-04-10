@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard,
   Users,
@@ -12,10 +12,12 @@ import {
   Wallet,
   CalendarCheck,
   Percent,
+  LogOut,
   X,
 } from "lucide-react";
 
 import { SIDEBAR_ITEMS } from "@/lib/admin-data";
+import { clearAuthSession } from "@/lib/client-api";
 import { cn } from "@/lib/utils";
 
 type SidebarProps = {
@@ -36,6 +38,13 @@ const iconMap = {
 
 export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
   const pathname = usePathname();
+  const router = useRouter();
+
+  const handleLogout = () => {
+    clearAuthSession();
+    onClose();
+    router.replace("/login");
+  };
 
   return (
     <>
@@ -98,6 +107,17 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
               );
             })}
           </nav>
+
+          <div className="border-t border-white/8 p-3">
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="flex w-full items-center gap-3 rounded-2xl border border-rose-400/15 bg-rose-500/10 px-3 py-3 text-sm font-semibold text-rose-100 transition-all duration-200 hover:border-rose-300/30 hover:bg-rose-500/16 hover:text-white"
+            >
+              <LogOut className="h-4 w-4 text-rose-200" />
+              <span>Log out</span>
+            </button>
+          </div>
         </div>
       </aside>
     </>

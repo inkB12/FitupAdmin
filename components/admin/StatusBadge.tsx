@@ -2,7 +2,7 @@
 
 type StatusBadgeProps = {
   label: string;
-  tone?: "success" | "warning" | "neutral";
+  tone?: "success" | "warning" | "neutral" | "danger";
 };
 
 export default function StatusBadge({
@@ -17,6 +17,8 @@ export default function StatusBadge({
           "border-emerald-400/40 bg-emerald-400/12 text-emerald-100",
         tone === "warning" &&
           "border-amber-400/40 bg-amber-400/12 text-amber-100",
+        tone === "danger" &&
+          "border-rose-400/40 bg-rose-400/12 text-rose-100",
         tone === "neutral" && "border-sky-400/30 bg-sky-400/10 text-sky-100"
       )}
     >

@@ -1,6 +1,6 @@
 "use client";
 
-import { ExternalLink, Eye, X } from "lucide-react";
+import { Eye, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import Pagination from "@/components/admin/Pagination";
@@ -16,11 +16,8 @@ type TopupApiRow = {
   accountId?: string | null;
   amount?: number | string | null;
   status?: number | string | null;
-  method?: number | string | null;
   orderCode?: number | string | null;
-  checkoutUrl?: string | null;
   paidAt?: string | null;
-  expiredAt?: string | null;
   confirmedAt?: string | null;
   createdAt?: string | null;
 };
@@ -31,11 +28,8 @@ type TopupRow = {
   accountName: string;
   amount: number;
   status: number;
-  method: number;
   orderCode: string;
-  checkoutUrl: string;
   paidAt: string | null;
-  expiredAt: string | null;
   confirmedAt: string | null;
   createdAt: string | null;
 };
@@ -176,7 +170,7 @@ function formatDate(value: string | null | undefined) {
 }
 
 function getTimelineDate(row: TopupRow) {
-  return row.paidAt ?? row.confirmedAt ?? row.createdAt ?? row.expiredAt;
+  return row.paidAt ?? row.confirmedAt ?? row.createdAt;
 }
 
 function isWithinRange(value: string | null | undefined, from: string, to: string) {
@@ -214,13 +208,6 @@ function getStatusLabel(status: number) {
   return `Status ${status}`;
 }
 
-function getMethodLabel(method: number) {
-  if (method === 0) {
-    return "PayOS";
-  }
-  return `Method ${method}`;
-}
-
 function extractAccounts(payload: unknown): AccountRecord[] {
   return findAccountArray(payload) ?? [];
 }
@@ -239,11 +226,8 @@ function normalizeRows(payload: unknown, accountMap: Record<string, string>) {
         accountName: accountMap[accountId] ?? accountId ?? "Unknown",
         amount: toNumber(row.amount),
         status: toNumber(row.status),
-        method: toNumber(row.method),
         orderCode: row.orderCode !== undefined && row.orderCode !== null ? String(row.orderCode) : "-",
-        checkoutUrl: typeof row.checkoutUrl === "string" ? row.checkoutUrl : "",
         paidAt: row.paidAt ?? null,
-        expiredAt: row.expiredAt ?? null,
         confirmedAt: row.confirmedAt ?? null,
         createdAt: row.createdAt ?? null,
       } satisfies TopupRow;
@@ -251,11 +235,35 @@ function normalizeRows(payload: unknown, accountMap: Record<string, string>) {
     .filter((row) => row.paymentId);
 }
 
-function DetailItem({ label, value }: { label: string; value: string }) {
+function DetailItem({
+  label,
+  value,
+  emphasis = false,
+}: {
+  label: string;
+  value: string;
+  emphasis?: boolean;
+}) {
   return (
-    <div className="admin-panel rounded-2xl p-4">
-      <p className="text-xs uppercase tracking-[0.12em] text-[var(--admin-muted)]">{label}</p>
-      <p className="mt-2 break-all text-sm font-semibold text-white">{value || "-"}</p>
+    <div
+      className={
+        emphasis
+          ? "rounded-2xl border border-[#f0b35b]/20 bg-[linear-gradient(135deg,rgba(240,179,91,0.15),rgba(255,255,255,0.04))] p-5"
+          : "admin-panel rounded-2xl p-4"
+      }
+    >
+      <p
+        className={
+          emphasis
+            ? "text-xs uppercase tracking-[0.12em] text-[#ffd99b]"
+            : "text-xs uppercase tracking-[0.12em] text-[var(--admin-muted)]"
+        }
+      >
+        {label}
+      </p>
+      <p className={emphasis ? "mt-3 break-all text-lg font-black text-white" : "mt-2 break-all text-sm font-semibold text-white"}>
+        {value || "-"}
+      </p>
     </div>
   );
 }
@@ -367,7 +375,6 @@ export default function PaymentHistoryPage() {
   const [rows, setRows] = useState<TopupRow[]>([]);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
-  const [methodFilter, setMethodFilter] = useState("all");
   const [dateFrom, setDateFrom] = useState(defaultRange.from);
   const [dateTo, setDateTo] = useState(defaultRange.to);
   const [page, setPage] = useState(1);
@@ -424,21 +431,19 @@ export default function PaymentHistoryPage() {
   const filteredRows = useMemo(() => {
     return rows.filter((row) => {
       const matchesStatus = statusFilter === "all" || String(row.status) === statusFilter;
-      const matchesMethod = methodFilter === "all" || String(row.method) === methodFilter;
       const timelineDate = getTimelineDate(row);
       const matchesDate = isWithinRange(timelineDate, dateFrom, dateTo);
       const searchPayload = {
         ...row,
         amountFormatted: formatVnd(row.amount),
         statusLabel: getStatusLabel(row.status),
-        methodLabel: getMethodLabel(row.method),
         paidAtFormatted: formatDate(row.paidAt),
         timelineDateFormatted: formatDate(timelineDate),
       };
 
-      return matchesStatus && matchesMethod && matchesDate && matchesSearch(searchPayload, combinedQuery);
+      return matchesStatus && matchesDate && matchesSearch(searchPayload, combinedQuery);
     });
-  }, [combinedQuery, dateFrom, dateTo, methodFilter, rows, statusFilter]);
+  }, [combinedQuery, dateFrom, dateTo, rows, statusFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
@@ -590,18 +595,6 @@ export default function PaymentHistoryPage() {
                 { label: "Failed", value: "3" },
               ],
             },
-            {
-              label: "Method",
-              value: methodFilter,
-              onChange: (value) => {
-                setMethodFilter(value);
-                setPage(1);
-              },
-              options: [
-                { label: "All methods", value: "all" },
-                { label: "PayOS", value: "0" },
-              ],
-            },
           ]}
         />
 
@@ -614,7 +607,6 @@ export default function PaymentHistoryPage() {
                 <th className="pb-3 pr-4 font-semibold">Account</th>
                 <th className="pb-3 pr-4 font-semibold">Amount</th>
                 <th className="pb-3 pr-4 font-semibold">Status</th>
-                <th className="pb-3 pr-4 font-semibold">Method</th>
                 <th className="pb-3 pr-4 font-semibold">Order Code</th>
                 <th className="pb-3 pr-4 font-semibold">Paid At</th>
                 <th className="pb-3 text-right font-semibold">Actions</th>
@@ -631,7 +623,6 @@ export default function PaymentHistoryPage() {
                   <td className="py-4 pr-4">
                     <StatusBadge label={getStatusLabel(row.status)} tone={getStatusTone(row.status)} />
                   </td>
-                  <td className="py-4 pr-4">{getMethodLabel(row.method)}</td>
                   <td className="py-4 pr-4">{row.orderCode}</td>
                   <td className="py-4 pr-4">{formatDate(row.paidAt)}</td>
                   <td className="py-4 text-right">
@@ -675,33 +666,18 @@ export default function PaymentHistoryPage() {
               </button>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <div className="grid gap-4 lg:grid-cols-4">
+              <DetailItem label="Amount" value={formatVnd(detailState.row.amount)} emphasis />
+              <DetailItem label="Status" value={getStatusLabel(detailState.row.status)} emphasis />
+              <DetailItem label="Paid At" value={formatDate(detailState.row.paidAt)} emphasis />
+              <DetailItem label="Order Code" value={detailState.row.orderCode} emphasis />
+            </div>
+
+            <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               <DetailItem label="Payment ID" value={detailState.row.paymentId} />
               <DetailItem label="Account" value={detailState.row.accountName} />
-              <DetailItem label="Account ID" value={detailState.row.accountId} />
-              <DetailItem label="Amount" value={formatVnd(detailState.row.amount)} />
-              <DetailItem label="Status" value={getStatusLabel(detailState.row.status)} />
-              <DetailItem label="Method" value={getMethodLabel(detailState.row.method)} />
-              <DetailItem label="Order Code" value={detailState.row.orderCode} />
               <DetailItem label="Created At" value={formatDate(detailState.row.createdAt)} />
-              <DetailItem label="Paid At" value={formatDate(detailState.row.paidAt)} />
               <DetailItem label="Confirmed At" value={formatDate(detailState.row.confirmedAt)} />
-              <DetailItem label="Expired At" value={formatDate(detailState.row.expiredAt)} />
-              <div className="admin-panel rounded-2xl p-4">
-                <p className="text-xs uppercase tracking-[0.12em] text-[var(--admin-muted)]">Checkout URL</p>
-                {detailState.row.checkoutUrl ? (
-                  <a
-                    href={detailState.row.checkoutUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="mt-2 inline-flex items-center gap-2 text-sm font-semibold text-[#ffe2a3] hover:underline"
-                  >
-                    Open checkout <ExternalLink className="h-3.5 w-3.5" />
-                  </a>
-                ) : (
-                  <p className="mt-2 text-sm font-semibold text-white">-</p>
-                )}
-              </div>
             </div>
           </div>
         </div>
