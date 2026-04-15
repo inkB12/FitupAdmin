@@ -173,6 +173,14 @@ function getTimelineDate(row: TopupRow) {
   return row.paidAt ?? row.confirmedAt ?? row.createdAt;
 }
 
+function isPaidStatus(status: number) {
+  return status === 1;
+}
+
+function isFailedStatus(status: number) {
+  return !isPaidStatus(status);
+}
+
 function isWithinRange(value: string | null | undefined, from: string, to: string) {
   if (!value) {
     return false;
@@ -189,23 +197,11 @@ function isWithinRange(value: string | null | undefined, from: string, to: strin
 }
 
 function getStatusTone(status: number) {
-  if (status === 1) {
-    return "success";
-  }
-  if (status === 3) {
-    return "warning";
-  }
-  return "neutral";
+  return isPaidStatus(status) ? "success" : "warning";
 }
 
 function getStatusLabel(status: number) {
-  if (status === 1) {
-    return "Paid";
-  }
-  if (status === 3) {
-    return "Failed";
-  }
-  return `Status ${status}`;
+  return isPaidStatus(status) ? "Paid" : "Failed";
 }
 
 function extractAccounts(payload: unknown): AccountRecord[] {
@@ -430,7 +426,12 @@ export default function PaymentHistoryPage() {
 
   const filteredRows = useMemo(() => {
     return rows.filter((row) => {
-      const matchesStatus = statusFilter === "all" || String(row.status) === statusFilter;
+      const matchesStatus =
+        statusFilter === "all"
+          ? true
+          : statusFilter === "paid"
+            ? isPaidStatus(row.status)
+            : isFailedStatus(row.status);
       const timelineDate = getTimelineDate(row);
       const matchesDate = isWithinRange(timelineDate, dateFrom, dateTo);
       const searchPayload = {
@@ -449,9 +450,9 @@ export default function PaymentHistoryPage() {
   const currentPage = Math.min(page, totalPages);
   const pageRows = filteredRows.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
-  const paidCount = useMemo(() => rows.filter((row) => row.status === 1).length, [rows]);
-  const failedCount = useMemo(() => rows.filter((row) => row.status === 3).length, [rows]);
-  const paidRowsInRange = useMemo(() => filteredRows.filter((row) => row.status === 1), [filteredRows]);
+  const paidCount = useMemo(() => rows.filter((row) => isPaidStatus(row.status)).length, [rows]);
+  const failedCount = useMemo(() => rows.filter((row) => isFailedStatus(row.status)).length, [rows]);
+  const paidRowsInRange = useMemo(() => filteredRows.filter((row) => isPaidStatus(row.status)), [filteredRows]);
   const paidRevenue = useMemo(
     () => paidRowsInRange.reduce((sum, row) => sum + row.amount, 0),
     [paidRowsInRange]
@@ -591,8 +592,8 @@ export default function PaymentHistoryPage() {
               },
               options: [
                 { label: "All status", value: "all" },
-                { label: "Paid", value: "1" },
-                { label: "Failed", value: "3" },
+                { label: "Paid", value: "paid" },
+                { label: "Failed", value: "failed" },
               ],
             },
           ]}

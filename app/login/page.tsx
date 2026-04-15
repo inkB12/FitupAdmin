@@ -41,7 +41,7 @@ function findToken(value: unknown): string | null {
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState("");
+  const [credential, setCredential] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -56,7 +56,7 @@ export default function LoginPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email: credential, password }),
       });
 
       if (!response.ok) {
@@ -111,12 +111,15 @@ export default function LoginPage() {
 
         <form className="space-y-4" onSubmit={handleSubmit}>
           <label className="block">
-            <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.1em] text-zinc-400">Email</span>
+            <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.1em] text-zinc-400">
+              Email or Username
+            </span>
             <input
-              type="email"
-              placeholder="admin@fitup.com"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
+              type="text"
+              placeholder="admin"
+              value={credential}
+              onChange={(event) => setCredential(event.target.value)}
+              autoComplete="username"
               className="h-11 w-full rounded-xl border border-zinc-700 bg-zinc-900 px-4 text-sm outline-none transition-colors focus:border-[#d68c45]"
               required
             />
