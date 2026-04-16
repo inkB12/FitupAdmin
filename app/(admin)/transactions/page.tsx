@@ -392,8 +392,13 @@ export default function TransactionsPage() {
   const totals = useMemo(() => {
     const paid = rows.filter((item) => item.status === 1).length;
     const failed = rows.filter((item) => item.status === 3).length;
-    const premium = rows.filter((item) => item.serviceType === 1).length;
-    return { paid, failed, premium };
+    const bookingPtTransactions = rows.filter((item) => item.serviceType !== 1).length;
+    const premiumAccounts = new Set(
+      rows
+        .filter((item) => item.serviceType === 1 && item.status === 1 && item.accountId)
+        .map((item) => item.accountId)
+    ).size;
+    return { paid, failed, bookingPtTransactions, premiumAccounts };
   }, [rows]);
 
   const combinedQuery = useMemo(
@@ -475,7 +480,8 @@ export default function TransactionsPage() {
           { label: "Payments", value: String(rows.length), tone: "info" },
           { label: "Paid", value: String(totals.paid), tone: "success" },
           { label: "Failed", value: String(totals.failed), tone: "warning" },
-          { label: "Premium", value: String(totals.premium), tone: "accent" },
+          { label: "BookingPT Tx", value: String(totals.bookingPtTransactions), tone: "info" },
+          { label: "Premium Accounts", value: String(totals.premiumAccounts), tone: "accent" },
         ]}
       />
 

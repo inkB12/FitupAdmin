@@ -209,23 +209,11 @@ function isWithinCurrentMonth(value: string | null | undefined) {
 }
 
 function getTopupStatusLabel(status: number) {
-  if (status === 1) {
-    return "Paid";
-  }
-  if (status === 3) {
-    return "Failed";
-  }
-  return `Status ${status}`;
+  return status === 1 ? "Paid" : "Failed";
 }
 
 function getTopupStatusTone(status: number) {
-  if (status === 1) {
-    return "success";
-  }
-  if (status === 3) {
-    return "warning";
-  }
-  return "neutral";
+  return status === 1 ? "success" : "warning";
 }
 
 function getServiceTypeLabel(serviceType: number) {
@@ -424,11 +412,6 @@ export default function DashboardPage() {
     () => accounts.filter((row) => getAccountStatus(row).toLowerCase() === "suspended").length,
     [accounts]
   );
-  const totalPoints = useMemo(
-    () => accounts.reduce((sum, row) => sum + toNumber(row.pointAmount), 0),
-    [accounts]
-  );
-
   const paidTopups = useMemo(() => topups.filter((row) => toNumber(row.status) === 1), [topups]);
   const monthlyPaidTopups = useMemo(
     () => paidTopups.filter((row) => isWithinCurrentMonth(getTopupTimeline(row))),
@@ -439,8 +422,13 @@ export default function DashboardPage() {
     [monthlyPaidTopups]
   );
 
-  const paidServicePayments = useMemo(
-    () => servicePayments.filter((row) => toNumber(row.status) === 1).length,
+  const premiumRegisteredUsers = useMemo(
+    () =>
+      new Set(
+        servicePayments
+          .filter((row) => toNumber(row.serviceType) === 1 && toNumber(row.status) === 1 && row.accountId)
+          .map((row) => row.accountId)
+      ).size,
     [servicePayments]
   );
   const activePremiumTypes = useMemo(
@@ -461,17 +449,17 @@ export default function DashboardPage() {
       icon: "users" as const,
     },
     {
-      title: "Total Points",
-      value: formatPoints(totalPoints),
-      delta: `Suspended: ${suspendedAccounts}`,
-      trend: suspendedAccounts === 0 ? ("up" as const) : ("down" as const),
-      icon: "wallet" as const,
+      title: "Premium Users",
+      value: String(premiumRegisteredUsers),
+      delta: `Premium active: ${activePremiumTypes}`,
+      trend: premiumRegisteredUsers > 0 ? ("up" as const) : ("down" as const),
+      icon: "users" as const,
     },
     {
-      title: "Service Payments",
-      value: String(servicePayments.length),
-      delta: `Paid: ${paidServicePayments}`,
-      trend: paidServicePayments > 0 ? ("up" as const) : ("down" as const),
+      title: "Payment History",
+      value: String(topups.length),
+      delta: `Paid: ${paidTopups.length}`,
+      trend: paidTopups.length > 0 ? ("up" as const) : ("down" as const),
       icon: "activity" as const,
     },
     {
@@ -526,12 +514,12 @@ export default function DashboardPage() {
       <PageHero
         eyebrow="FITUP Admin"
         title="Operations Overview"
-        description="Live dashboard powered by the current admin APIs. Revenue graph uses Payment History only, while points stay as summary totals."
+        description="Live dashboard powered by the current admin APIs. Revenue and payment count use Payment History, with premium users as membership signal."
         stats={[
           { label: "Accounts", value: String(accounts.length), tone: "info" },
           { label: "Bookings", value: String(bookings.length), tone: "success" },
           { label: "Topup Revenue", value: formatVnd(monthlyRevenue), tone: "warning" },
-          { label: "Total Points", value: formatPoints(totalPoints), tone: "accent" },
+          { label: "Premium Users", value: String(premiumRegisteredUsers), tone: "accent" },
         ]}
       />
 
@@ -568,8 +556,8 @@ export default function DashboardPage() {
 
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-1">
               <div className="admin-panel rounded-2xl p-4">
-                <p className="text-xs uppercase tracking-[0.12em] text-[var(--admin-muted)]">Total Points</p>
-                <p className="mt-2 text-lg font-bold text-white">{formatPoints(totalPoints)}</p>
+                <p className="text-xs uppercase tracking-[0.12em] text-[var(--admin-muted)]">Premium Users</p>
+                <p className="mt-2 text-lg font-bold text-white">{premiumRegisteredUsers}</p>
               </div>
               <div className="admin-panel rounded-2xl p-4">
                 <p className="text-xs uppercase tracking-[0.12em] text-[var(--admin-muted)]">Conversion Rates On</p>
